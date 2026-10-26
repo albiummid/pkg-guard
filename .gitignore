@@ -5,3 +5,5 @@ dist
 jetbrains/build
 jetbrains/.gradle
 .gradle
+.intellijPlatform
+.kotlin

@@ -1,6 +1,6 @@
 package dev.pkgguard
 
-import com.intellij.ide.trustedProjects.TrustedProjects
+import com.intellij.ide.impl.isTrusted
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.State
@@ -47,7 +47,7 @@ class PkgGuardSettings : PersistentStateComponent<PkgGuardSettings.State> {
         "enableOutdated" to state.enableOutdated,
         "showMajorUpdates" to state.showMajorUpdates,
         "minSeverity" to state.minSeverity,
-        "auditFallback" to (state.auditFallback && TrustedProjects.isProjectTrusted(project)),
+        "auditFallback" to (state.auditFallback && project.isTrusted()),
         "registry" to state.registry,
         "ignoredAdvisories" to state.ignoredAdvisories,
         "ignoredPackages" to state.ignoredPackages,

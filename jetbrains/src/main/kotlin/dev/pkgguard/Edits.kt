@@ -2,7 +2,7 @@ package dev.pkgguard
 
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.CapturingProcessHandler
-import com.intellij.ide.trustedProjects.TrustedProjects
+import com.intellij.ide.impl.isTrusted
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
@@ -61,7 +61,7 @@ object Installer {
     /** Honours `installAfterFix` (ask / auto / never) and never installs in an untrusted project. */
     fun offer(project: Project, file: VirtualFile, pm: Pm) {
         val mode = project.service<PkgGuardSettings>().state.installAfterFix
-        if (mode == "never" || !TrustedProjects.isProjectTrusted(project)) return
+        if (mode == "never" || !project.isTrusted()) return
         ApplicationManager.getApplication().invokeLater {
             if (mode == "auto" || Messages.showYesNoDialog(project, "Run `${pm.installCmd}` now?", "Pkg Guard", Messages.getQuestionIcon()) == Messages.YES) install(project, file, pm)
         }
@@ -70,7 +70,7 @@ object Installer {
     fun install(project: Project, file: VirtualFile, pm: Pm) = run(project, pm.root ?: file.parent.path, pm.installCmd)
 
     fun run(project: Project, dir: String, command: String) {
-        if (!TrustedProjects.isProjectTrusted(project)) return notify(project, "Trust the project to run `$command`.", NotificationType.WARNING)
+        if (!project.isTrusted()) return notify(project, "Trust the project to run `$command`.", NotificationType.WARNING)
         object : Task.Backgroundable(project, "Running $command", true) {
             override fun run(indicator: ProgressIndicator) {
                 // npm / yarn / pnpm are .cmd shims on Windows, so go through the shell

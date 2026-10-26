@@ -6,6 +6,7 @@ import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
@@ -58,7 +59,9 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
         tree.cellRenderer = Renderer()
         setContent(ScrollPaneFactory.createScrollPane(tree))
 
-        val refresh = DumbAwareAction.create("Refresh", "Re-scan all package.json files", AllIcons.Actions.Refresh) { svc.refreshAll(clearCaches = true) }
+        val refresh = object : DumbAwareAction("Refresh", "Re-scan all package.json files", AllIcons.Actions.Refresh) {
+            override fun actionPerformed(e: AnActionEvent) = svc.refreshAll(clearCaches = true)
+        }
         toolbar = ActionManager.getInstance().createActionToolbar(ActionPlaces.TOOLWINDOW_TOOLBAR_BAR, DefaultActionGroup(refresh), true).also { it.targetComponent = this }.component
 
         tree.addMouseListener(object : PopupHandler() {
@@ -88,7 +91,7 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
     fun reload() {
         ApplicationManager.getApplication().executeOnPooledThread {
             val files = svc.findProjects()
-            files.filter { it.path !in svc.states }.forEach { svc.scan(it) }
+            files.filter { !svc.states.containsKey(it.path) }.forEach { svc.scan(it) }
             val scripts = files.associateWith { scriptsOf(it) }
             ApplicationManager.getApplication().invokeLater({
                 val root = DefaultMutableTreeNode()

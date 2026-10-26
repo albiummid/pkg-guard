@@ -18,8 +18,6 @@ dependencies {
     intellijPlatform {
         // WebStorm has the same platform + JSON modules; develop against IDEA Community for a smaller download.
         create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.2.5")
-        bundledPlugin("com.intellij.modules.json")
-        instrumentationTools()
         pluginVerifier()
     }
 }
@@ -27,6 +25,7 @@ dependencies {
 kotlin { jvmToolchain(17) }
 
 intellijPlatform {
+    instrumentCode = false // Kotlin only: no .form files or @NotNull instrumentation needed
     pluginConfiguration {
         ideaVersion {
             sinceBuild = "242"

@@ -58,3 +58,13 @@ code --install-extension pkg-guard-0.1.0.vsix
 ```
 
 Not supported yet: yarn berry / pnpm lockfiles (direct dependencies are still checked using `node_modules` or the declared range), single-line dependency sections, workspaces `catalog:` ranges.
+
+## JetBrains plugin
+
+`jetbrains/` holds a WebStorm / IntelliJ plugin that reuses the same scanner: `yarn build:server` bundles `src/server.ts` into `dist/server.js`, which the plugin runs with Node 18+ (set the path in *Settings | Tools | Pkg Guard*). It provides inspections with Alt+Enter fixes on `package.json`, a **Pkg Guard** tool window, the peer/engines compatibility check with companion updates, and a settings page.
+
+```
+cd jetbrains
+./gradlew buildPlugin   # zip in build/distributions, installable via "Install Plugin from Disk…"
+./gradlew runIde        # sandbox IDE
+```
