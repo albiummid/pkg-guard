@@ -1,0 +1,24 @@
+<idea-plugin>
+  <id>dev.pkgguard</id>
+  <name>Pkg Guard</name>
+  <vendor>albiummid</vendor>
+  <description><![CDATA[
+    Inline vulnerability warnings and update suggestions in <code>package.json</code>, including transitive
+    dependencies. Checks peer dependencies and Node engines before an update and offers companion updates.
+    Requires Node.js 18+ on the machine.
+  ]]></description>
+
+  <depends>com.intellij.modules.platform</depends>
+  <depends>com.intellij.modules.json</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <externalAnnotator language="JSON" implementationClass="dev.pkgguard.PackageJsonAnnotator"/>
+    <toolWindow id="Pkg Guard" anchor="right" icon="/icons/pkgGuard.svg" factoryClass="dev.pkgguard.PkgGuardToolWindowFactory"/>
+    <projectConfigurable parentId="tools" id="dev.pkgguard.settings" instance="dev.pkgguard.PkgGuardConfigurable" displayName="Pkg Guard"/>
+    <notificationGroup id="Pkg Guard" displayType="BALLOON"/>
+  </extensions>
+
+  <applicationListeners>
+    <listener class="dev.pkgguard.PkgGuardFileListener" topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+  </applicationListeners>
+</idea-plugin>

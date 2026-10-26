@@ -197,6 +197,7 @@
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",
+    "build:server": "esbuild src/server.ts --bundle --platform=node --target=node18 --outfile=dist/server.js",
     "test": "tsc -p . && node --test \"out/test/*.test.js\"",
     "package": "vsce package --no-dependencies"
   },
@@ -204,6 +205,7 @@
     "@types/node": "22",
     "@types/vscode": "1.85.0",
     "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
   }
 }

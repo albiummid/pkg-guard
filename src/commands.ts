@@ -1,15 +1,14 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { CompatReport, Dependent, checkCompat, findCompanion, formatReport } from './compat';
+import { CompatReport, formatReport } from './compat';
+import { RangeUpdate, compatFor, latestStable, rangeEdits } from './core';
 import { install, offerInstall, runInTerminal } from './install';
-import { Section, addToSection, locateDeps } from './packageJson';
+import { addToSection, locateDeps } from './packageJson';
 import { addSorted, removeDependency } from './pkgEdit';
 import { detectPm } from './pm';
 import { RegistryInfo, fetchInfo } from './registry';
 import { changelogBetween, fetchMeta, npmUrl } from './repo';
-import { satisfies } from './satisfies';
-import { readInstalledPkg } from './scan';
-import { baseVersion, compare, diffKind, gt, isStable, prefixOf } from './semver';
+import { compare, diffKind, isStable } from './semver';
 import { readText, scanUri, settings, states } from './store';
 import { ActionNode, DepNode, ProjectNode, ScriptNode, VersionNode } from './tree';
 import { BumpKind, bumpTargets, newerVersions, previousVersion } from './bump';
@@ -36,27 +35,13 @@ async function showMarkdown(md: string): Promise<void> {
   await vscode.commands.executeCommand('markdown.showPreview', doc.uri);
 }
 
-interface RangeUpdate {
-  name: string;
-  version: string;
-  section?: Section;
-}
-
 /** Rewrites dependency ranges in package.json (keeps ^ / ~ style). Returns the document, or undefined if nothing matched. */
 async function setRanges(uri: vscode.Uri, updates: RangeUpdate[]): Promise<vscode.TextDocument | undefined> {
   const doc = await openDoc(uri);
-  const entries = locateDeps(doc.getText());
+  const edits = rangeEdits(doc.getText(), updates);
+  if (!edits.length) return undefined;
   const we = new vscode.WorkspaceEdit();
-  let n = 0;
-  for (const u of updates) {
-    const matches = entries.filter((e) => e.name === u.name && (!u.section || e.section === u.section));
-    for (const e of matches.slice(0, u.section ? 1 : matches.length)) {
-      const prefix = baseVersion(e.range) ? prefixOf(e.range) : '^';
-      we.replace(uri, new vscode.Range(e.line, e.versionStart, e.line, e.versionEnd), prefix + u.version);
-      n++;
-    }
-  }
-  if (!n) return undefined;
+  for (const e of edits) we.replace(uri, new vscode.Range(e.startLine, e.startChar, e.endLine, e.endChar), e.newText);
   await vscode.workspace.applyEdit(we);
   return doc;
 }
@@ -69,45 +54,16 @@ async function replaceWhole(uri: vscode.Uri, text: string): Promise<vscode.TextD
   return doc;
 }
 
-/** What else changes if `name` goes from its installed version to `target`. */
-async function compatFor(node: DepNode, info: RegistryInfo, target: string): Promise<CompatReport> {
-  const dir = path.dirname(node.uri.fsPath);
-  const st = states.get(node.uri.toString());
-  const installed = st?.result.installed.get(node.name);
-  const pkg = JSON.parse(readText(node.uri).text);
-  const direct = locateDeps(readText(node.uri).text);
-  const installedOf = (d: string): string | undefined => st?.result.installed.get(d) ?? readInstalledPkg(dir, d)?.version;
-
-  // installed packages that peer on this one: read their manifests from node_modules, ask the registry only for the ones that would break
-  const dependents: Dependent[] = [];
-  for (const e of direct) {
-    if (e.name === node.name) continue;
-    const m = readInstalledPkg(dir, e.name);
-    const range: string | undefined = m?.peerDependencies?.[node.name];
-    if (!m || range === undefined) continue;
-    const dep: Dependent = { name: e.name, version: m.version, peerRange: range, optional: !!m.peerDependenciesMeta?.[node.name]?.optional };
-    if (!satisfies(target, range)) {
-      const depInfo = await fetchInfo(e.name, settings().registry);
-      if (depInfo) dep.fixedBy = findCompanion(depInfo.versions, depInfo.manifests, node.name, target, m.version);
-    }
-    dependents.push(dep);
-  }
-  return checkCompat({
+function compatForNode(node: DepNode, info: RegistryInfo, target: string): Promise<CompatReport> {
+  return compatFor({
+    text: readText(node.uri).text,
+    pkgFile: node.uri.fsPath,
     name: node.name,
-    installed,
     target,
-    current: installed ? info.manifests[installed] : undefined,
-    next: info.manifests[target],
-    installedOf,
-    projectNode: pkg.engines?.node,
-    dependents,
+    info,
+    registry: settings().registry,
+    installed: states.get(node.uri.toString())?.result.installed,
   });
-}
-
-function latestStable(info: RegistryInfo): string | undefined {
-  let best = info.latest && isStable(info.latest) ? info.latest : undefined;
-  for (const v of info.versions) if (isStable(v) && (!best || gt(v, best))) best = v;
-  return best;
 }
 
 async function pickVersion(node: DepNode, info: RegistryInfo, installed?: string): Promise<string | undefined> {
@@ -131,7 +87,7 @@ async function updateFlow(node: DepNode, target: string | undefined, onlyReport 
   if (!to) return;
   if (installed && compare(to, installed) === 0) return void vscode.window.showInformationMessage(`${node.name} is already at ${to}.`);
 
-  const report = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Checking ${node.name}@${to} compatibility…` }, () => compatFor(node, info, to));
+  const report = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Checking ${node.name}@${to} compatibility…` }, () => compatForNode(node, info, to));
   const text = formatReport(node.name, installed, to, report);
   if (onlyReport) return showMarkdown('```text\n' + text + '\n```');
 

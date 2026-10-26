@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import { registerCommands } from './commands';
+import { fixEffect } from './core';
 import { Finding, Fix, buildFindings } from './findings';
 import { offerInstall } from './install';
 import { clearOsvCache } from './osv';
-import { addToSection } from './packageJson';
 import { clearRegistryCache } from './registry';
 import { scan, ScanResult } from './scan';
 import { findProjects, onDidChange, output, scanUri, settings, states } from './store';
@@ -129,23 +129,15 @@ function updateStatus(ed: vscode.TextEditor | undefined): void {
 }
 
 async function applyFix(doc: vscode.TextDocument, f: Finding, fx: Fix): Promise<void> {
-  const cfg = vscode.workspace.getConfiguration('pkgGuard');
-  if (fx.type === 'setVersion') {
-    const we = new vscode.WorkspaceEdit();
-    we.replace(doc.uri, new vscode.Range(f.entry.line, f.entry.versionStart, f.entry.line, f.entry.versionEnd), fx.range);
-    await vscode.workspace.applyEdit(we);
-  } else if (fx.type === 'addOverride') {
-    const we = new vscode.WorkspaceEdit();
-    const full = new vscode.Range(0, 0, doc.lineCount, 0);
-    we.replace(doc.uri, doc.validateRange(full), addToSection(doc.getText(), fx.section, fx.name, fx.range));
-    await vscode.workspace.applyEdit(we);
-  } else if (fx.type === 'ignoreAdvisory') {
-    await cfg.update('ignoredAdvisories', [...new Set([...cfg.get<string[]>('ignoredAdvisories', []), fx.id])], vscode.ConfigurationTarget.Workspace);
-    return;
-  } else if (fx.type === 'ignorePackage') {
-    await cfg.update('ignoredPackages', [...new Set([...cfg.get<string[]>('ignoredPackages', []), fx.name])], vscode.ConfigurationTarget.Workspace);
+  const effect = fixEffect(doc.getText(), f.entry, fx);
+  if (effect.type === 'setting') {
+    const cfg = vscode.workspace.getConfiguration('pkgGuard');
+    await cfg.update(effect.key, [...new Set([...cfg.get<string[]>(effect.key, []), effect.value])], vscode.ConfigurationTarget.Workspace);
     return;
   }
+  const we = new vscode.WorkspaceEdit();
+  for (const e of effect.edits) we.replace(doc.uri, doc.validateRange(new vscode.Range(e.startLine, e.startChar, e.endLine, e.endChar)), e.newText);
+  await vscode.workspace.applyEdit(we);
   const pm = states.get(doc.uri.toString())?.result.pm;
   if (pm) await offerInstall(doc, pm);
 }
