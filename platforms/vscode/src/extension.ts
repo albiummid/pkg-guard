@@ -24,7 +24,7 @@ function isPackageJson(doc: vscode.TextDocument): boolean {
   return /[\\/]package\.json$/.test(doc.fileName) && !/[\\/]node_modules[\\/]/.test(doc.fileName);
 }
 
-function toSeverity(s: Finding['severity']): vscode.DiagnosticSeverity {
+function toSeverity(s: Finding['level']): vscode.DiagnosticSeverity {
   return s === 'error' ? vscode.DiagnosticSeverity.Error : s === 'warning' ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Information;
 }
 
@@ -68,7 +68,7 @@ function publish(doc: vscode.TextDocument): void {
       const d = new vscode.Diagnostic(
         new vscode.Range(f.entry.line, f.entry.nameStart, f.entry.line, f.entry.end),
         f.message,
-        toSeverity(f.severity),
+        toSeverity(f.level),
       );
       d.source = 'pkg-guard';
       if (f.code && f.url) d.code = { value: f.code, target: vscode.Uri.parse(f.url) };
@@ -82,14 +82,14 @@ const RANK = { error: 3, warning: 2, info: 1 } as const;
 
 function decorate(ed: vscode.TextEditor): void {
   const st = states.get(ed.document.uri.toString());
-  const buckets: Record<Finding['severity'], vscode.DecorationOptions[]> = { error: [], warning: [], info: [] };
+  const buckets: Record<Finding['level'], vscode.DecorationOptions[]> = { error: [], warning: [], info: [] };
   if (st && st.version === ed.document.version) {
     const byLine = new Map<number, Finding[]>();
     for (const f of st.findings) byLine.set(f.entry.line, [...(byLine.get(f.entry.line) ?? []), f]);
     for (const [line, fs] of byLine) {
-      const worst = fs.reduce((a, b) => (RANK[b.severity] > RANK[a.severity] ? b : a)).severity;
+      const worst = fs.reduce((a, b) => (RANK[b.level] > RANK[a.level] ? b : a)).level;
       const text = fs
-        .sort((a, b) => RANK[b.severity] - RANK[a.severity])
+        .sort((a, b) => RANK[b.level] - RANK[a.level])
         .map((f) => f.inline)
         .join('  ');
       const md = new vscode.MarkdownString(undefined, true);
@@ -194,7 +194,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('pkgGuard.applyFix', async (uri: string, line: number, fi: number, xi: number) => {
       const st = states.get(uri);
-      const lineFindings = st?.findings.filter((x) => x.entry.line === line).sort((a, b) => RANK[b.severity] - RANK[a.severity]);
+      const lineFindings = st?.findings.filter((x) => x.entry.line === line).sort((a, b) => RANK[b.level] - RANK[a.level]);
       const f = lineFindings?.[fi];
       const fx = f?.fixes[xi];
       if (!f || !fx) return;

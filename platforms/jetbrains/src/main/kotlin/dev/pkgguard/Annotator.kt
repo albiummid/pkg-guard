@@ -33,7 +33,7 @@ class PackageJsonAnnotator : ExternalAnnotator<PackageJsonAnnotator.Input, ScanR
             val lineStart = doc.getLineStartOffset(f.entry.line)
             val end = lineStart + f.entry.end
             if (end > doc.textLength) continue
-            val severity = when (f.severity) {
+            val severity = when (f.level) {
                 "error" -> HighlightSeverity.ERROR
                 "warning" -> HighlightSeverity.WARNING
                 else -> HighlightSeverity.WEAK_WARNING

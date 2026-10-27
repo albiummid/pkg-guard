@@ -47,7 +47,7 @@ test('checkCompat: peers, node engines, dependents with companion updates', () =
   assert.match(text, /error:needs peer @nestjs\/core \^12\.0\.0, but 11\.2\.3 is installed/);
   assert.doesNotMatch(text, /rxjs/);
   assert.doesNotMatch(text, /class-validator/); // optional and not installed
-  assert.match(text, /warn:requires Node >=22/);
+  assert.match(text, /warning:requires Node >=22/);
   assert.match(text, /info:dependencies: adds 1 \(uid\)/);
   assert.match(text, /error:@nestjs\/jwt@11\.0\.2 .*update @nestjs\/jwt to 12\.0\.3/);
   assert.match(text, /error:old-lib@1\.0\.0 .*no newer old-lib accepts/);

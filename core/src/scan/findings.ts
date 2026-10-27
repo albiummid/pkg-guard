@@ -13,7 +13,7 @@ export type Fix =
 export interface Finding {
   kind: 'vuln' | 'transitive' | 'outdated' | 'deprecated';
   entry: DepEntry;
-  severity: 'error' | 'warning' | 'info';
+  level: 'error' | 'warning' | 'info';
   message: string;
   code?: string;
   url?: string;
@@ -37,7 +37,7 @@ function breakdown(vs: Vuln[]): string {
     .join(', ');
 }
 
-function diagSeverity(s: Severity): Finding['severity'] {
+function diagLevel(s: Severity): Finding['level'] {
   return s === 'critical' || s === 'high' ? 'error' : s === 'low' ? 'info' : 'warning';
 }
 
@@ -84,7 +84,7 @@ export function buildFindings(r: ScanResult, s: Settings): Finding[] {
       out.push({
         kind: 'vuln',
         entry: e,
-        severity: diagSeverity(worst.severity),
+        level: diagLevel(worst.severity),
         code: worst.id,
         url: worst.url,
         message: `${e.name}@${installed ?? '?'} has ${direct.length} known ${direct.length === 1 ? 'vulnerability' : 'vulnerabilities'} (${breakdown(direct)})` +
@@ -120,7 +120,7 @@ export function buildFindings(r: ScanResult, s: Settings): Finding[] {
       out.push({
         kind: 'transitive',
         entry: e,
-        severity: diagSeverity(worst.severity) === 'error' ? 'warning' : diagSeverity(worst.severity),
+        level: diagLevel(worst.severity) === 'error' ? 'warning' : diagLevel(worst.severity),
         code: worst.id,
         url: worst.url,
         message: `Transitive: ${worst.pkg}@${worst.version || '?'} (via ${p.join(' › ')}) has ${vs.length} known ${vs.length === 1 ? 'vulnerability' : 'vulnerabilities'} (${breakdown(vs)})` +
@@ -134,7 +134,7 @@ export function buildFindings(r: ScanResult, s: Settings): Finding[] {
     if (!s.enableOutdated || !installed || !info || s.ignoredPackages.includes(e.name)) continue;
     const dep = info.deprecated[installed];
     if (dep) {
-      out.push({ kind: 'deprecated', entry: e, severity: 'warning', message: `${e.name}@${installed} is deprecated: ${dep}`, inline: '⚠ deprecated', fixes: [] });
+      out.push({ kind: 'deprecated', entry: e, level: 'warning', message: `${e.name}@${installed} is deprecated: ${dep}`, inline: '⚠ deprecated', fixes: [] });
     }
     const sug = suggest(installed, info);
     if (sug.inMajor && !(appliedTarget && compare(sug.inMajor, appliedTarget) <= 0)) {
@@ -143,7 +143,7 @@ export function buildFindings(r: ScanResult, s: Settings): Finding[] {
       out.push({
         kind: 'outdated',
         entry: e,
-        severity: 'info',
+        level: 'info',
         message: `${e.name}: ${kind} update available ${installed} → ${sug.inMajor}`,
         inline: `↑ ${sug.inMajor}`,
         fixes: [
@@ -157,7 +157,7 @@ export function buildFindings(r: ScanResult, s: Settings): Finding[] {
       out.push({
         kind: 'outdated',
         entry: e,
-        severity: 'info',
+        level: 'info',
         message: `${e.name}: major update available ${installed} → ${sug.nextMajor} (check the changelog for breaking changes)`,
         inline: `⇡ ${sug.nextMajor} major`,
         fixes: [

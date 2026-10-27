@@ -184,7 +184,7 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                 is DepNode -> {
                     val st = svc.states[n.file.path]
                     val findings = st?.findings?.filter { it.entry.name == n.entry.name && it.entry.section == n.entry.section }.orEmpty()
-                    val worst = if (findings.any { it.severity == "error" }) SimpleTextAttributes.ERROR_ATTRIBUTES else if (findings.any { it.severity == "warning" }) SimpleTextAttributes.ERROR_ATTRIBUTES.derive(SimpleTextAttributes.STYLE_PLAIN, com.intellij.ui.JBColor.ORANGE, null, null) else SimpleTextAttributes.REGULAR_ATTRIBUTES
+                    val worst = if (findings.any { it.level == "error" }) SimpleTextAttributes.ERROR_ATTRIBUTES else if (findings.any { it.level == "warning" }) SimpleTextAttributes.ERROR_ATTRIBUTES.derive(SimpleTextAttributes.STYLE_PLAIN, com.intellij.ui.JBColor.ORANGE, null, null) else SimpleTextAttributes.REGULAR_ATTRIBUTES
                     icon = AllIcons.Nodes.PpLib
                     append(n.entry.name, worst)
                     st?.installed?.get(n.entry.name)?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }

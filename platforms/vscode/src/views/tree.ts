@@ -35,8 +35,8 @@ const SECTION_LABEL: Record<Section, string> = {
 };
 
 function level(fs: Finding[]): 'error' | 'warning' | 'info' | null {
-  if (fs.some((f) => f.severity === 'error')) return 'error';
-  if (fs.some((f) => f.severity === 'warning')) return 'warning';
+  if (fs.some((f) => f.level === 'error')) return 'error';
+  if (fs.some((f) => f.level === 'warning')) return 'warning';
   return fs.length ? 'info' : null;
 }
 

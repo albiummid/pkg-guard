@@ -55,7 +55,7 @@ object UpdateFlow {
         if (onlyReport) return showText(project, "${dep.name} ${installed ?: "?"} → $to", report.text)
 
         val updates = mutableListOf(RangeUpdate(dep.name, to, dep.section))
-        if (report.issues.any { it.level == "error" || it.level == "warn" }) {
+        if (report.issues.any { it.level == "error" || it.level == "warning" }) {
             val hasError = report.issues.any { it.level == "error" }
             val n = report.companions.size
             val companions = if (n > 0) "Update + $n companion${if (n > 1) "s" else ""}" else null

@@ -166,7 +166,7 @@ test('buildFindings: direct vuln gets an update fix, transitive gets an override
   };
   const f = buildFindings(result, settings);
   const lodashVuln = f.find((x) => x.kind === 'vuln')!;
-  assert.equal(lodashVuln.severity, 'error');
+  assert.equal(lodashVuln.level, 'error');
   assert.deepEqual(lodashVuln.fixes[0], { type: 'setVersion', range: '4.18.1', title: 'Update lodash to 4.18.1 (fixes 1 advisory)' });
   assert.match(lodashVuln.inline, /4\.18\.1/);
   const tr = f.find((x) => x.kind === 'transitive')!;

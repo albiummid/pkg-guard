@@ -26,7 +26,7 @@ export interface CompatInput {
 }
 
 export interface Issue {
-  level: 'error' | 'warn' | 'info';
+  level: 'error' | 'warning' | 'info';
   text: string;
 }
 
@@ -47,7 +47,7 @@ export function checkCompat(i: CompatInput): CompatReport {
   const companions: Companion[] = [];
   const next = i.next ?? {};
 
-  if (next.deprecated) issues.push({ level: 'warn', text: `${i.name}@${i.target} is deprecated: ${next.deprecated}` });
+  if (next.deprecated) issues.push({ level: 'warning', text: `${i.name}@${i.target} is deprecated: ${next.deprecated}` });
 
   // 1. what the new version needs from the project
   for (const [peer, range] of Object.entries(next.peerDependencies ?? {})) {
@@ -55,9 +55,9 @@ export function checkCompat(i: CompatInput): CompatReport {
     const have = i.installedOf(peer);
     if (!isRange(range)) continue;
     if (!have) {
-      if (!optional) issues.push({ level: 'warn', text: `needs peer ${peer} ${range}, which is not installed` });
+      if (!optional) issues.push({ level: 'warning', text: `needs peer ${peer} ${range}, which is not installed` });
     } else if (!satisfies(have, range)) {
-      issues.push({ level: optional ? 'warn' : 'error', text: `needs peer ${peer} ${range}, but ${have} is installed` });
+      issues.push({ level: optional ? 'warning' : 'error', text: `needs peer ${peer} ${range}, but ${have} is installed` });
     }
   }
 
@@ -66,7 +66,7 @@ export function checkCompat(i: CompatInput): CompatReport {
   if (needNode && i.projectNode && isRange(needNode)) {
     const base = baseVersion(i.projectNode);
     if (base && !satisfies(base, needNode)) {
-      issues.push({ level: 'warn', text: `requires Node ${needNode}, but the project allows ${i.projectNode}` });
+      issues.push({ level: 'warning', text: `requires Node ${needNode}, but the project allows ${i.projectNode}` });
     }
   }
 
@@ -89,7 +89,7 @@ export function checkCompat(i: CompatInput): CompatReport {
   // 4. installed packages whose peer range would reject the new version
   for (const d of i.dependents) {
     if (!isRange(d.peerRange) || satisfies(i.target, d.peerRange)) continue;
-    const level = d.optional ? 'warn' : 'error';
+    const level = d.optional ? 'warning' : 'error';
     if (d.fixedBy) {
       issues.push({ level, text: `${d.name}@${d.version} peers on ${i.name} ${d.peerRange} — update ${d.name} to ${d.fixedBy}` });
       companions.push({ name: d.name, from: d.version, to: d.fixedBy, reason: `peer ${i.name} ${d.peerRange}` });
@@ -120,10 +120,10 @@ export function findCompanion(
 }
 
 export function formatReport(name: string, from: string | undefined, to: string, r: CompatReport): string {
-  const icon = { error: '✖', warn: '⚠', info: 'ℹ' } as const;
+  const icon = { error: '✖', warning: '⚠', info: 'ℹ' } as const;
   const lines = [`${name} ${from ?? '?'} → ${to}`, ''];
   if (!r.issues.length) lines.push('✔ No compatibility problems found.');
-  for (const lvl of ['error', 'warn', 'info'] as const) for (const x of r.issues.filter((y) => y.level === lvl)) lines.push(`${icon[lvl]} ${x.text}`);
+  for (const lvl of ['error', 'warning', 'info'] as const) for (const x of r.issues.filter((y) => y.level === lvl)) lines.push(`${icon[lvl]} ${x.text}`);
   if (r.companions.length) {
     lines.push('', 'Companion updates:');
     for (const c of r.companions) lines.push(`  • ${c.name} ${c.from} → ${c.to}  (${c.reason})`);

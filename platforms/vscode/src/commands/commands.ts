@@ -91,7 +91,7 @@ async function updateFlow(node: DepNode, target: string | undefined, onlyReport 
   const text = formatReport(node.name, installed, to, report);
   if (onlyReport) return showMarkdown('```text\n' + text + '\n```');
 
-  const problems = report.issues.some((i) => i.level === 'error' || i.level === 'warn');
+  const problems = report.issues.some((i) => i.level === 'error' || i.level === 'warning');
   const updates: RangeUpdate[] = [{ name: node.name, version: to, section: node.section }];
   if (problems) {
     const hasErr = report.issues.some((i) => i.level === 'error');

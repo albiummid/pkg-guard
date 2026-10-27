@@ -26,7 +26,7 @@ data class Fix(
 data class Finding(
     val kind: String, // vuln | transitive | outdated | deprecated
     val entry: Entry,
-    val severity: String, // error | warning | info
+    val level: String, // error | warning | info
     val message: String,
     val code: String? = null,
     val url: String? = null,
