@@ -1,37 +1,41 @@
 # Pkg Guard
 
-Inline vulnerability warnings and update suggestions in `package.json`.
+Vulnerability warnings and update suggestions right inside `package.json`, including transitive dependencies, with one-click fixes.
 
-- **Inline ghost text** at the end of each dependency line: `⚠ 3 vulns → 4.18.1`, `↑ 11.2.8`, `⇡ 12.2.0 major`. Hover it for advisory details and one-click fixes.
-- **Problems / squiggles** on the dependency (red = high/critical, yellow = moderate, blue = info).
-- **Quick fixes** (lightbulb / `Ctrl+.`): update to the fixed version, pin a transitive package via `resolutions` (yarn) or `overrides` (npm), ignore an advisory, stop suggesting updates for a package.
-- **Transitive vulnerabilities** are found from `yarn.lock` (v1) or `package-lock.json` (v2/3) and shown on the direct dependency that pulls them in, with the path (`@nestjs/platform-express › express › body-parser`).
-- Status bar summary; click to re-scan.
+![Inline warnings and quick fixes](https://raw.githubusercontent.com/albiummid/pkg-guard/master/docs/media/vscode-inline.gif)
 
-## Sidebar (activity bar → Pkg Guard)
+## Features
 
-Every `package.json` in the workspace (monorepos included) as a project, with:
+- **Inline hints** at the end of each dependency line: `⚠ 3 vulns → 4.18.1`, `↑ 11.2.8`, `⇡ 12.2.0 major`. Hover for advisory details and fixes.
+- **Squiggles** in the Problems panel: red for high/critical, yellow for moderate, blue for info.
+- **Quick fixes** (lightbulb or `Ctrl+.`): update to the fixed version, pin a transitive package via `resolutions` (yarn) or `overrides` (npm), ignore an advisory, stop suggesting updates for a package.
+- **Transitive vulnerabilities** from `yarn.lock` (v1) or `package-lock.json` (v2/3), shown on the direct dependency that pulls them in, with the path (`@nestjs/platform-express › express › body-parser`).
+- **Status bar** summary; click to re-scan.
 
-- **Scripts** – ▶ runs `npm|yarn|pnpm|bun run <script>` in a terminal; click jumps to the script.
-- **Needs attention** – only the vulnerable / outdated dependencies.
-- **dependencies / devDependencies / optionalDependencies** – red/yellow/blue icons, installed version, fix hints.
-- **Actions** – install all, update all within the current major (patch/minor + vulnerability fixes), add dependency, re-scan.
-- **Per dependency** (inline buttons + right-click): update to latest, update to a chosen version, open npm page, open repository, show changelog (installed → latest, from GitHub Releases or `CHANGELOG.md`), check compatibility, remove.
+## Sidebar
+
+Open **Pkg Guard** in the activity bar.
+
+![Sidebar](https://raw.githubusercontent.com/albiummid/pkg-guard/master/docs/media/vscode-sidebar.gif)
+
+Every `package.json` in the workspace (monorepos included) appears as a project:
+
+- **Scripts**: ▶ runs `npm|yarn|pnpm|bun run <script>` in a terminal.
+- **Needs attention**: only the vulnerable or outdated dependencies.
+- **dependencies / devDependencies / optionalDependencies** with installed version and fix hints.
+- **Project actions**: install all, update all within the current major, add dependency, re-scan.
+- **Per dependency** (inline buttons and right-click): update to latest or a chosen version, open the npm page or repository, show the changelog, check compatibility, remove.
 
 ### Compatibility check
 
-Before a version change, the target version's manifest is compared with the project:
+Before a version change, the target version is compared with your project:
 
-- its `peerDependencies` against what is installed (npm-style range matching: `^ ~ x-ranges, >= <, hyphen, ||`),
-- `engines.node` against the project's `engines.node`,
-- added / removed dependencies, and ranges that conflict with what you pin,
-- **installed packages whose own peer range would reject the new version**, with the newest release of each that accepts it offered as a *companion update* ("Update + N companions").
+- its `peerDependencies` against what is installed,
+- `engines.node` against your project's `engines.node`,
+- added or removed dependencies,
+- installed packages whose own peer range would reject the new version. The newest release of each that accepts it is offered as a **companion update**.
 
-Limits: dependents are checked among your direct dependencies, using their installed `node_modules` manifests.
-
-Data sources: [OSV.dev](https://osv.dev) for advisories (falls back to `yarn audit` / `npm audit` when offline) and the npm registry for versions.
-
-Fixes only edit `package.json`; run your package manager afterwards to update the lockfile.
+Dependents are checked among your direct dependencies, using their installed `node_modules` manifests.
 
 ## Settings
 
@@ -47,21 +51,12 @@ Fixes only edit `package.json`; run your package manager afterwards to update th
 | `pkgGuard.ignoredAdvisories` | `[]` | |
 | `pkgGuard.ignoredPackages` | `[]` | |
 
-## Develop
+## Notes
 
-```
-cd platforms/vscode
-yarn install
-yarn typecheck
-# F5 in VS Code (open the platforms/vscode/ folder) to launch an Extension Development Host
-yarn package     # writes <repo root>/output/vscode/pkg-guard-0.1.0.vsix
-code --install-extension <repo root>/output/vscode/pkg-guard-0.1.0.vsix
-```
+- Advisories come from [OSV.dev](https://osv.dev) (falls back to `yarn audit` / `npm audit` when offline). Versions come from the npm registry.
+- Fixes only edit `package.json`. Run your package manager afterwards to update the lockfile.
+- Not supported yet: yarn berry / pnpm lockfiles (direct dependencies are still checked using `node_modules` or the declared range), single-line dependency sections, workspaces `catalog:` ranges.
 
-Shared logic lives in `core/` and is bundled into the extension by esbuild. Run its tests with `cd core && yarn test`.
+## Building from source
 
-Not supported yet: yarn berry / pnpm lockfiles (direct dependencies are still checked using `node_modules` or the declared range), single-line dependency sections, workspaces `catalog:` ranges.
-
-## Source layout (`platforms/vscode/src/`)
-
-`extension.ts` (activation), `commands/`, `views/` (tree), `services/` (workspace store, install).
+See the [repository README](https://github.com/albiummid/pkg-guard#development).
