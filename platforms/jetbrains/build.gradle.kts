@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "dev.pkgguard"
-version = "0.1.0"
+version = providers.gradleProperty("version").get()
 
 repositories {
     mavenCentral()
@@ -17,18 +17,18 @@ repositories {
 dependencies {
     intellijPlatform {
         // WebStorm has the same platform + JSON modules; develop against IDEA Community for a smaller download.
-        create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.2.5")
+        create(IntelliJPlatformType.IntellijIdeaCommunity, providers.gradleProperty("pkgguard.ideaVersion").get())
         pluginVerifier()
     }
 }
 
-kotlin { jvmToolchain(17) }
+kotlin { jvmToolchain(providers.gradleProperty("pkgguard.jvm").get().toInt()) }
 
 intellijPlatform {
     instrumentCode = false // Kotlin only: no .form files or @NotNull instrumentation needed
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = "242"
+            sinceBuild = providers.gradleProperty("pkgguard.sinceBuild").get()
             untilBuild = provider { null }
         }
     }

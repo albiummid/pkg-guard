@@ -1,0 +1,13 @@
+# Single source of truth for versions. Apply with: node scripts/set-version.js
+version: 0.1.0
+
+vscode:
+  engine: 1.85.0      # minimum VS Code (engines.vscode and @types/vscode)
+
+node:
+  target: 18          # esbuild target for the sidecar and the extension bundle
+
+jetbrains:
+  sinceBuild: 242     # oldest supported IDE build
+  ideaVersion: 2024.2.5   # IDE the plugin is compiled against
+  jvm: 17
