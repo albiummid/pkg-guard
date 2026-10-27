@@ -2,7 +2,7 @@
   "name": "pkg-guard-core",
   "version": "0.1.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",

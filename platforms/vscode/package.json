@@ -4,7 +4,7 @@
   "description": "Inline vulnerability warnings and update suggestions in package.json, including transitive dependencies.",
   "version": "0.1.0",
   "publisher": "local",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "private": true,
   "engines": {
     "vscode": "^1.85.0"
@@ -560,5 +560,14 @@
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/albiummid/pkg-guard.git",
+    "directory": "platforms/vscode"
+  },
+  "homepage": "https://github.com/albiummid/pkg-guard#readme",
+  "bugs": {
+    "url": "https://github.com/albiummid/pkg-guard/issues"
   }
 }
