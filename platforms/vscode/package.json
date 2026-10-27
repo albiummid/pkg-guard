@@ -1,0 +1,564 @@
+{
+  "name": "pkg-guard",
+  "displayName": "Pkg Guard",
+  "description": "Inline vulnerability warnings and update suggestions in package.json, including transitive dependencies.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In an untrusted workspace Pkg Guard still reads package.json and checks vulnerabilities and updates, but it will not run scripts, installs or audit commands."
+    }
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "workspaceContains:**/package.json"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "pkgGuard",
+          "title": "Pkg Guard",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "pkgGuard": [
+        {
+          "id": "pkgGuard.packages",
+          "name": "Packages"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "pkgGuard.packages",
+        "contents": "No package.json found in this workspace."
+      }
+    ],
+    "commands": [
+      {
+        "command": "pkgGuard.refresh",
+        "title": "Pkg Guard: Re-scan dependencies"
+      },
+      {
+        "command": "pkgGuard.refreshTree",
+        "title": "Refresh",
+        "category": "Pkg Guard",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "pkgGuard.rescanProject",
+        "title": "Re-scan this project",
+        "category": "Pkg Guard",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "pkgGuard.openPackageJson",
+        "title": "Open package.json",
+        "category": "Pkg Guard",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "pkgGuard.installAll",
+        "title": "Install all dependencies",
+        "category": "Pkg Guard",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "pkgGuard.fixVulns",
+        "title": "Fix vulnerabilities",
+        "category": "Pkg Guard",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "pkgGuard.updateAllPatch",
+        "title": "Update all — patch",
+        "category": "Pkg Guard"
+      },
+      {
+        "command": "pkgGuard.updateAllMinor",
+        "title": "Update all — minor",
+        "category": "Pkg Guard"
+      },
+      {
+        "command": "pkgGuard.updateAllMajor",
+        "title": "Update all — major",
+        "category": "Pkg Guard"
+      },
+      {
+        "command": "pkgGuard.updatePatch",
+        "title": "Update to newest patch",
+        "category": "Pkg Guard",
+        "icon": {
+          "light": "media/patch.svg",
+          "dark": "media/patch.svg"
+        }
+      },
+      {
+        "command": "pkgGuard.updateMinor",
+        "title": "Update to newest minor",
+        "category": "Pkg Guard",
+        "icon": {
+          "light": "media/minor.svg",
+          "dark": "media/minor.svg"
+        }
+      },
+      {
+        "command": "pkgGuard.updateMajor",
+        "title": "Update to newest major",
+        "category": "Pkg Guard",
+        "icon": {
+          "light": "media/major.svg",
+          "dark": "media/major.svg"
+        }
+      },
+      {
+        "command": "pkgGuard.updateVersion",
+        "title": "Update to this version",
+        "category": "Pkg Guard",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "pkgGuard.versionChangelog",
+        "title": "Changelog: installed → this version",
+        "category": "Pkg Guard",
+        "icon": "$(history)"
+      },
+      {
+        "command": "pkgGuard.versionChangelogOnly",
+        "title": "Changelog: this version only",
+        "category": "Pkg Guard",
+        "icon": "$(book)"
+      },
+      {
+        "command": "pkgGuard.addDependency",
+        "title": "Add dependency…",
+        "category": "Pkg Guard",
+        "icon": "$(add)"
+      },
+      {
+        "command": "pkgGuard.runScript",
+        "title": "Run script",
+        "category": "Pkg Guard",
+        "icon": "$(play)"
+      },
+      {
+        "command": "pkgGuard.revealScript",
+        "title": "Go to script",
+        "category": "Pkg Guard"
+      },
+      {
+        "command": "pkgGuard.revealDep",
+        "title": "Go to dependency",
+        "category": "Pkg Guard"
+      },
+      {
+        "command": "pkgGuard.openNpm",
+        "title": "Open on npm",
+        "category": "Pkg Guard",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "pkgGuard.openRepo",
+        "title": "Open repository",
+        "category": "Pkg Guard",
+        "icon": "$(repo)"
+      },
+      {
+        "command": "pkgGuard.changelog",
+        "title": "Show changelog (installed → latest)",
+        "category": "Pkg Guard",
+        "icon": "$(history)"
+      },
+      {
+        "command": "pkgGuard.updateLatest",
+        "title": "Update to latest",
+        "category": "Pkg Guard",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "pkgGuard.updateTo",
+        "title": "Update to version…",
+        "category": "Pkg Guard",
+        "icon": "$(versions)"
+      },
+      {
+        "command": "pkgGuard.checkCompat",
+        "title": "Check compatibility with version…",
+        "category": "Pkg Guard",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "pkgGuard.remove",
+        "title": "Remove dependency",
+        "category": "Pkg Guard",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "pkgGuard.copyName",
+        "title": "Copy package name",
+        "category": "Pkg Guard"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "pkgGuard.refreshTree",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.rescanProject",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.openPackageJson",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.installAll",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.fixVulns",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.updateAllPatch",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.updateAllMinor",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.updateAllMajor",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.updatePatch",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.updateMinor",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.updateMajor",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.updateVersion",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.versionChangelog",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.versionChangelogOnly",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.addDependency",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.runScript",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.revealScript",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.revealDep",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.openNpm",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.openRepo",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.changelog",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.updateLatest",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.updateTo",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.checkCompat",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.remove",
+          "when": "false"
+        },
+        {
+          "command": "pkgGuard.copyName",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "pkgGuard.refreshTree",
+          "when": "view == pkgGuard.packages",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "pkgGuard.installAll",
+          "when": "view == pkgGuard.packages && viewItem == project",
+          "group": "inline@1"
+        },
+        {
+          "command": "pkgGuard.rescanProject",
+          "when": "view == pkgGuard.packages && viewItem == project",
+          "group": "inline@2"
+        },
+        {
+          "command": "pkgGuard.addDependency",
+          "when": "view == pkgGuard.packages && viewItem == project",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "pkgGuard.fixVulns",
+          "when": "view == pkgGuard.packages && viewItem == project",
+          "group": "1_modify@2"
+        },
+        {
+          "command": "pkgGuard.updateAllPatch",
+          "when": "view == pkgGuard.packages && viewItem == project",
+          "group": "1_modify@3"
+        },
+        {
+          "command": "pkgGuard.updateAllMinor",
+          "when": "view == pkgGuard.packages && viewItem == project",
+          "group": "1_modify@4"
+        },
+        {
+          "command": "pkgGuard.updateAllMajor",
+          "when": "view == pkgGuard.packages && viewItem == project",
+          "group": "1_modify@5"
+        },
+        {
+          "command": "pkgGuard.openPackageJson",
+          "when": "view == pkgGuard.packages && viewItem == project",
+          "group": "2_open@1"
+        },
+        {
+          "command": "pkgGuard.runScript",
+          "when": "view == pkgGuard.packages && viewItem == script",
+          "group": "inline@1"
+        },
+        {
+          "command": "pkgGuard.revealScript",
+          "when": "view == pkgGuard.packages && viewItem == script",
+          "group": "1_script@2"
+        },
+        {
+          "command": "pkgGuard.updatePatch",
+          "when": "view == pkgGuard.packages && viewItem =~ /^dep.*\\.patch/",
+          "group": "inline@1"
+        },
+        {
+          "command": "pkgGuard.updateMinor",
+          "when": "view == pkgGuard.packages && viewItem =~ /^dep.*\\.minor/",
+          "group": "inline@2"
+        },
+        {
+          "command": "pkgGuard.updateMajor",
+          "when": "view == pkgGuard.packages && viewItem =~ /^dep.*\\.major/",
+          "group": "inline@3"
+        },
+        {
+          "command": "pkgGuard.changelog",
+          "when": "view == pkgGuard.packages && viewItem =~ /^dep/",
+          "group": "inline@4"
+        },
+        {
+          "command": "pkgGuard.updatePatch",
+          "when": "view == pkgGuard.packages && viewItem =~ /^dep.*\\.patch/",
+          "group": "2_update@0"
+        },
+        {
+          "command": "pkgGuard.updateMinor",
+          "when": "view == pkgGuard.packages && viewItem =~ /^dep.*\\.minor/",
+          "group": "2_update@0"
+        },
+        {
+          "command": "pkgGuard.updateMajor",
+          "when": "view == pkgGuard.packages && viewItem =~ /^dep.*\\.major/",
+          "group": "2_update@0"
+        },
+        {
+          "command": "pkgGuard.updateVersion",
+          "when": "view == pkgGuard.packages && viewItem =~ /^version/",
+          "group": "inline@1"
+        },
+        {
+          "command": "pkgGuard.versionChangelogOnly",
+          "when": "view == pkgGuard.packages && viewItem =~ /^version/",
+          "group": "inline@2"
+        },
+        {
+          "command": "pkgGuard.versionChangelog",
+          "when": "view == pkgGuard.packages && viewItem =~ /^version/",
+          "group": "1_notes@1"
+        },
+        {
+          "command": "pkgGuard.versionChangelogOnly",
+          "when": "view == pkgGuard.packages && viewItem =~ /^version/",
+          "group": "1_notes@2"
+        },
+        {
+          "command": "pkgGuard.openNpm",
+          "when": "view == pkgGuard.packages && viewItem =~ /^dep/",
+          "group": "1_info@1"
+        },
+        {
+          "command": "pkgGuard.openRepo",
+          "when": "view == pkgGuard.packages && viewItem =~ /^dep/",
+          "group": "1_info@2"
+        },
+        {
+          "command": "pkgGuard.changelog",
+          "when": "view == pkgGuard.packages && viewItem =~ /^dep/",
+          "group": "1_info@3"
+        },
+        {
+          "command": "pkgGuard.updateLatest",
+          "when": "view == pkgGuard.packages && viewItem =~ /^dep/",
+          "group": "2_update@1"
+        },
+        {
+          "command": "pkgGuard.updateTo",
+          "when": "view == pkgGuard.packages && viewItem =~ /^dep/",
+          "group": "2_update@2"
+        },
+        {
+          "command": "pkgGuard.checkCompat",
+          "when": "view == pkgGuard.packages && viewItem =~ /^dep/",
+          "group": "2_update@3"
+        },
+        {
+          "command": "pkgGuard.remove",
+          "when": "view == pkgGuard.packages && viewItem =~ /^dep/",
+          "group": "3_modify@1"
+        },
+        {
+          "command": "pkgGuard.copyName",
+          "when": "view == pkgGuard.packages && viewItem =~ /^dep/",
+          "group": "9_copy@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Pkg Guard",
+      "properties": {
+        "pkgGuard.enableVulnerabilities": {
+          "type": "boolean",
+          "default": true,
+          "description": "Report known vulnerabilities (OSV.dev)."
+        },
+        "pkgGuard.checkTransitive": {
+          "type": "boolean",
+          "default": true,
+          "description": "Also report vulnerabilities in transitive dependencies (needs a yarn.lock v1 or package-lock.json). They are shown on the direct dependency that pulls them in."
+        },
+        "pkgGuard.enableOutdated": {
+          "type": "boolean",
+          "default": true,
+          "description": "Suggest newer versions from the registry."
+        },
+        "pkgGuard.showMajorUpdates": {
+          "type": "boolean",
+          "default": true,
+          "description": "Also suggest updates that cross a major version."
+        },
+        "pkgGuard.minSeverity": {
+          "type": "string",
+          "enum": [
+            "low",
+            "moderate",
+            "high",
+            "critical"
+          ],
+          "default": "low",
+          "description": "Hide vulnerabilities below this severity."
+        },
+        "pkgGuard.auditFallback": {
+          "type": "boolean",
+          "default": true,
+          "description": "If OSV.dev is unreachable, fall back to `yarn audit` / `npm audit`."
+        },
+        "pkgGuard.installAfterFix": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "auto",
+            "never"
+          ],
+          "default": "ask",
+          "description": "After applying a fix, run the package manager install (npm / yarn / pnpm / bun, detected from the lockfile or the packageManager field)."
+        },
+        "pkgGuard.registry": {
+          "type": "string",
+          "default": "https://registry.npmjs.org",
+          "description": "npm registry used for update suggestions."
+        },
+        "pkgGuard.ignoredAdvisories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Advisory ids (GHSA-..., CVE-...) to ignore."
+        },
+        "pkgGuard.ignoredPackages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Packages to skip for update suggestions."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p . --noEmit",
+    "compile": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --sourcemap --outfile=dist/extension.js",
+    "watch": "yarn compile --watch",
+    "vscode:prepublish": "yarn typecheck && yarn compile",
+    "package": "vsce package --no-dependencies && node scripts/copy-output.js"
+  },
+  "devDependencies": {
+    "@types/node": "22",
+    "@types/vscode": "1.85.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}

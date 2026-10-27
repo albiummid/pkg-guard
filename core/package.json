@@ -1,0 +1,17 @@
+{
+  "name": "pkg-guard-core",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "build:server": "esbuild src/server/server.ts --bundle --platform=node --target=node18 --outfile=dist/server.js",
+    "test": "tsc -p . && node --test \"out/test/*.test.js\""
+  },
+  "devDependencies": {
+    "@types/node": "22",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}

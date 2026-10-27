@@ -1,9 +1,16 @@
-node_modules
-out
+# dependencies
+node_modules/
+
+# build output
+build/
+dist/
+out/
+output/
 *.vsix
-dist
-jetbrains/build
-jetbrains/.gradle
-.gradle
-.intellijPlatform
-.kotlin
+*.zip
+*.tsbuildinfo
+
+# gradle / intellij
+.gradle/
+.intellijPlatform/
+.kotlin/
