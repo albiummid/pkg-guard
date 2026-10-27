@@ -59,6 +59,10 @@ node scripts/set-version.js --check # fail if a file is out of sync
 
 When adding a platform, add it to the `targets` list in `scripts/set-version.js`. The Kotlin and IntelliJ Gradle plugin versions stay in `platforms/jetbrains/build.gradle.kts` because the `plugins {}` block can't read properties.
 
+## Contributing
+
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first for how to report bugs, set up the project and submit changes.
+
 ## License
 
 [MIT](LICENSE)

@@ -1,0 +1,45 @@
+name: Bug report
+description: Something is wrong or unexpected
+labels: [bug]
+body:
+  - type: dropdown
+    id: ide
+    attributes:
+      label: IDE
+      options: [VS Code, WebStorm, IntelliJ IDEA, Other JetBrains IDE]
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: IDE version, Pkg Guard version, Node.js version, OS
+      placeholder: "VS Code 1.95, Pkg Guard 0.1.0, Node 20.11, Windows 11"
+    validations:
+      required: true
+  - type: dropdown
+    id: pm
+    attributes:
+      label: Package manager / lockfile
+      options: [npm, yarn v1, yarn berry, pnpm, bun, none]
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: A minimal `package.json` (and lockfile type) that reproduces it helps most.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "VS Code: Output > Pkg Guard. JetBrains: Help > Show Log."
+      render: text

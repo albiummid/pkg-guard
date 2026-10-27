@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Wrong or missing advisory
+    url: https://github.com/google/osv.dev/issues
+    about: Advisory data comes from OSV.dev. Report data problems there.
+  - name: Security vulnerability
+    url: https://github.com/albiummid/pkg-guard/security/advisories/new
+    about: Report security issues privately, not as a public issue.
