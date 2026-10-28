@@ -6,6 +6,12 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-28
+
+### Fixed
+
+- Remove unnecessary quotes in test script path in package.json
+
 ## [0.1.2] - 2026-10-28
 
 ### Added
@@ -21,5 +27,6 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 - Update JetBrains plugin integration and improve project trust handling
 - Pkg Guard plugin of JetBrains IDE for inline vulnerability warnings and updates in package.json
 
-[Unreleased]: https://github.com/albiummid/pkg-guard/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/albiummid/pkg-guard/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/albiummid/pkg-guard/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/albiummid/pkg-guard/releases/tag/v0.1.2
