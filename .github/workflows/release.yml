@@ -1,0 +1,128 @@
+name: Release
+
+# Start with: node scripts/release.js patch|minor|major --push   (bumps version.yml, commits, tags vX.Y.Z, pushes)
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Tag must match version.yml and every platform must be in sync
+        id: version
+        run: |
+          version="$(node scripts/set-version.js --print)"
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match version.yml (${version})." >&2
+            exit 1
+          fi
+          node scripts/set-version.js --check
+          node scripts/changelog.js --check
+          node scripts/changelog.js notes "${version}" > /dev/null
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+      - run: yarn install --frozen-lockfile && yarn test
+        working-directory: core
+      - run: yarn install --frozen-lockfile && yarn typecheck && yarn package
+        working-directory: platforms/vscode
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - run: bash ./gradlew buildPlugin --no-daemon
+        working-directory: platforms/jetbrains
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            output/vscode/*.vsix
+            output/jetbrains/*.zip
+          if-no-files-found: error
+
+  github-release:
+    name: GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Create the release (notes from CHANGELOG.md) with both installers attached
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/changelog.js notes "${{ needs.build.outputs.version }}" > release-notes.md
+          flags=""
+          case "${GITHUB_REF_NAME}" in *-*) flags="--prerelease" ;; esac
+          gh release create "${GITHUB_REF_NAME}" $flags --notes-file release-notes.md --title "Pkg Guard ${GITHUB_REF_NAME}" $(find dist -type f \( -name '*.vsix' -o -name '*.zip' \))
+
+  # The publish jobs only run when their token secret exists, and never for prereleases.
+  publish-vscode:
+    name: Publish VS Code extension
+    needs: [build, github-release]
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: VS Code Marketplace
+        if: ${{ env.VSCE_PAT != '' }}
+        run: npx --yes @vscode/vsce publish --packagePath dist/vscode/*.vsix --pat "$VSCE_PAT"
+      - name: Open VSX
+        if: ${{ env.OVSX_PAT != '' }}
+        run: npx --yes ovsx publish dist/vscode/*.vsix --pat "$OVSX_PAT"
+
+  publish-jetbrains:
+    name: Publish JetBrains plugin
+    needs: [build, github-release]
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    env:
+      PUBLISH_TOKEN: ${{ secrets.JETBRAINS_PUBLISH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for a token
+        id: gate
+        run: echo "has_token=$([ -n "$PUBLISH_TOKEN" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.has_token == 'true'
+        with:
+          node-version: 20
+      - run: yarn install --frozen-lockfile
+        if: steps.gate.outputs.has_token == 'true'
+        working-directory: core
+      - uses: actions/setup-java@v4
+        if: steps.gate.outputs.has_token == 'true'
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.gate.outputs.has_token == 'true'
+      - run: bash ./gradlew publishPlugin --no-daemon
+        if: steps.gate.outputs.has_token == 'true'
+        working-directory: platforms/jetbrains

@@ -61,6 +61,20 @@ cd platforms/jetbrains && ./gradlew buildPlugin # -> output/jetbrains/*.zip
 
 Never edit versions by hand in `package.json` or `gradle.properties`. Change [`version.yml`](version.yml) and run `node scripts/set-version.js`. Check with `node scripts/set-version.js --check`. Version bumps are done by maintainers at release time, so don't include one in a feature PR.
 
+`set-version.js` also takes `patch`, `minor` or `major` to bump from the current version, and `--print` to show it.
+
+### Releasing (maintainers)
+
+From a clean `master`:
+
+```bash
+node scripts/release.js patch --push    # or minor / major / x.y.z
+```
+
+This bumps `version.yml`, stamps every platform, updates `CHANGELOG.md`, commits `chore: release vX.Y.Z`, tags it and pushes. The tag starts `.github/workflows/release.yml`, which checks the tag against `version.yml` and the changelog, runs the tests, builds the `.vsix` and the plugin zip, and attaches both to a GitHub release whose notes are that version's section of `CHANGELOG.md` (tags with a `-` suffix are marked as pre-releases).
+
+**Changelog.** `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com): an `## [Unreleased]` section, then `## [x.y.z] - YYYY-MM-DD` sections with `### Added / Changed / Deprecated / Removed / Fixed / Security` groups. Write user-facing entries under Unreleased as changes land; the release script moves them under the new version. If Unreleased is empty, it builds the entries from Conventional Commit subjects since the last tag (`feat` → Added, `fix` → Fixed, `perf`/`refactor`/`revert` → Changed; `docs`, `chore`, `test` and `ci` are left out; `!` marks a breaking change). Curated entries read better than generated ones, so prefer writing them. `node scripts/changelog.js --check` validates the format and runs in CI. It then publishes only the stores whose secret exists: `VSCE_PAT` (VS Code Marketplace), `OVSX_PAT` (Open VSX), `JETBRAINS_PUBLISH_TOKEN` (JetBrains Marketplace). Before the first Marketplace publish, set a real `publisher` in `platforms/vscode/package.json` (it is `local` today). Pull requests and pushes to `master` run `.github/workflows/ci.yml` (version sync, core tests, VS Code typecheck and package, JetBrains build).
+
 ### Commits and pull requests
 
 - Use [Conventional Commits](https://www.conventionalcommits.org): `feat: ...`, `fix: ...`, `docs: ...`, `refactor: ...`, `test: ...`, `chore: ...`.

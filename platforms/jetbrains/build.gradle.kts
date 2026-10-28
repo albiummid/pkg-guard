@@ -32,6 +32,8 @@ intellijPlatform {
             untilBuild = provider { null }
         }
     }
+    // Only used by `publishPlugin` (the release workflow sets PUBLISH_TOKEN from a repository secret).
+    publishing { token = providers.environmentVariable("PUBLISH_TOKEN") }
 }
 
 // The Node sidecar: one bundled JS file built from ../../core/src by `yarn build:server`, shipped inside the plugin jar.

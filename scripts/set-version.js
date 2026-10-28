@@ -1,7 +1,9 @@
 // Single source of truth: <repo root>/version.yml.
 //   node scripts/set-version.js          -> stamp version.yml into every platform
 //   node scripts/set-version.js 0.2.0    -> set the product version first, then stamp
+//   node scripts/set-version.js patch    -> bump patch / minor / major (0.1.0 -> 0.1.1 / 0.2.0 / 1.0.0), then stamp
 //   node scripts/set-version.js --check  -> exit 1 if any file is out of sync
+//   node scripts/set-version.js --print  -> print the version from version.yml and exit
 const fs = require('fs');
 const path = require('path');
 
@@ -22,9 +24,18 @@ function readConfig() {
   return cfg;
 }
 
-const arg = process.argv[2];
+const bump = (v, kind) => {
+  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v);
+  if (!m) { console.error(`Cannot bump "${v}": expected x.y.z`); process.exit(1); }
+  const [major, minor, patch] = m.slice(1).map(Number);
+  return kind === 'major' ? `${major + 1}.0.0` : kind === 'minor' ? `${major}.${minor + 1}.0` : `${major}.${minor}.${patch + 1}`;
+};
+
+let arg = process.argv[2];
+if (arg === '--print') { console.log(readConfig().version); process.exit(0); }
 const check = arg === '--check';
 if (arg && !check) {
+  if (['patch', 'minor', 'major'].includes(arg)) arg = bump(readConfig().version, arg);
   if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(arg)) { console.error(`Invalid version: ${arg}`); process.exit(1); }
   fs.writeFileSync(ymlFile, fs.readFileSync(ymlFile, 'utf8').replace(/^version:.*$/m, `version: ${arg}`));
 }

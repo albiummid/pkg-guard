@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  versions:
+    name: Versions in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/set-version.js --check
+      - run: node scripts/changelog.js --check
+
+  core:
+    name: Core tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: core/yarn.lock
+      - run: yarn install --frozen-lockfile
+        working-directory: core
+      - run: yarn test
+        working-directory: core
+
+  vscode:
+    name: VS Code extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: platforms/vscode/yarn.lock
+      - run: yarn install --frozen-lockfile
+        working-directory: platforms/vscode
+      - run: yarn typecheck
+        working-directory: platforms/vscode
+      - run: yarn package
+        working-directory: platforms/vscode
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vscode-vsix
+          path: output/vscode/*.vsix
+          if-no-files-found: error
+
+  jetbrains:
+    name: JetBrains plugin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: core/yarn.lock
+      # the Gradle build bundles the sidecar with `yarn build:server` from core/
+      - run: yarn install --frozen-lockfile
+        working-directory: core
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - run: bash ./gradlew buildPlugin --no-daemon
+        working-directory: platforms/jetbrains
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jetbrains-zip
+          path: output/jetbrains/*.zip
+          if-no-files-found: error
