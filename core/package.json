@@ -10,7 +10,7 @@
     "test": "tsc -p . && node --test out/test/*.test.js"
   },
   "devDependencies": {
-    "@types/node": "22",
+    "@types/node": "26.6.5",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
   }
