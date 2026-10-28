@@ -2,7 +2,7 @@
   "name": "pkg-guard",
   "displayName": "Pkg Guard",
   "description": "Inline vulnerability warnings and update suggestions in package.json, including transitive dependencies.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "local",
   "license": "MIT",
   "private": true,

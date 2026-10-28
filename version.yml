@@ -1,5 +1,5 @@
 # Single source of truth for versions. Apply with: node scripts/set-version.js
-version: 0.1.0
+version: 0.1.1
 
 vscode:
   engine: 1.85.0      # minimum VS Code (engines.vscode and @types/vscode)

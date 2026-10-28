@@ -69,9 +69,12 @@ From a clean `master`:
 
 ```bash
 node scripts/release.js patch --push    # or minor / major / x.y.z
+yarn release:patch --push               # same thing; also release:minor and release:major (run from the repo root)
 ```
 
-This bumps `version.yml`, stamps every platform, updates `CHANGELOG.md`, commits `chore: release vX.Y.Z`, tags it and pushes. The tag starts `.github/workflows/release.yml`, which checks the tag against `version.yml` and the changelog, runs the tests, builds the `.vsix` and the plugin zip, and attaches both to a GitHub release whose notes are that version's section of `CHANGELOG.md` (tags with a `-` suffix are marked as pre-releases).
+`yarn version:patch`, `version:minor` and `version:major` only bump and stamp the version files, without committing or tagging.
+
+First it requires a clean `master` that is up to date with `origin` and runs the core tests, the VS Code typecheck and the version and changelog checks (`--skip-checks` skips them; `--help` shows usage). If any check fails, nothing is changed. Then it bumps `version.yml`, stamps every platform, updates `CHANGELOG.md`, commits `chore: release vX.Y.Z`, tags it and pushes. The tag starts `.github/workflows/release.yml`, which checks the tag against `version.yml` and the changelog, runs the tests, builds the `.vsix` and the plugin zip, and attaches both to a GitHub release whose notes are that version's section of `CHANGELOG.md` (tags with a `-` suffix are marked as pre-releases).
 
 **Changelog.** `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com): an `## [Unreleased]` section, then `## [x.y.z] - YYYY-MM-DD` sections with `### Added / Changed / Deprecated / Removed / Fixed / Security` groups. Write user-facing entries under Unreleased as changes land; the release script moves them under the new version. If Unreleased is empty, it builds the entries from Conventional Commit subjects since the last tag (`feat` → Added, `fix` → Fixed, `perf`/`refactor`/`revert` → Changed; `docs`, `chore`, `test` and `ci` are left out; `!` marks a breaking change). Curated entries read better than generated ones, so prefer writing them. `node scripts/changelog.js --check` validates the format and runs in CI. It then publishes only the stores whose secret exists: `VSCE_PAT` (VS Code Marketplace), `OVSX_PAT` (Open VSX), `JETBRAINS_PUBLISH_TOKEN` (JetBrains Marketplace). Before the first Marketplace publish, set a real `publisher` in `platforms/vscode/package.json` (it is `local` today). Pull requests and pushes to `master` run `.github/workflows/ci.yml` (version sync, core tests, VS Code typecheck and package, JetBrains build).
 
