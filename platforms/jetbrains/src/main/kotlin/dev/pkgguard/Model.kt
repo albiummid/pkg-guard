@@ -62,6 +62,9 @@ data class CompanionUpdate(val name: String, val from: String, val to: String, v
 
 data class CompatResponse(val issues: List<Issue>, val companions: List<CompanionUpdate>, val text: String)
 
+/** Only the Markdown is used here; the structured `report` the sidecar also returns is ignored. */
+data class UpgradeReportResponse(val markdown: String)
+
 data class ChangelogResponse(val source: String? = null, val markdown: String? = null, val url: String? = null)
 
 data class RepoUrl(val url: String? = null, val npm: String)

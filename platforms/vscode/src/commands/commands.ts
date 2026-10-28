@@ -9,7 +9,8 @@ import { detectPm } from '@core/manifest/pm';
 import { RegistryInfo, fetchInfo } from '@core/updates/registry';
 import { changelogBetween, fetchMeta, npmUrl } from '@core/changelog/repo';
 import { compare, diffKind, isStable } from '@core/utils/semver';
-import { readText, scanUri, settings, states } from '../services/store';
+import { generateUpgradeReport } from '@core/updates/report';
+import { findProjects, readText, scanUri, settings, states } from '../services/store';
 import { ActionNode, DepNode, ProjectNode, ScriptNode, VersionNode } from '../views/tree';
 import { BumpKind, bumpTargets, newerVersions, previousVersion } from '@core/updates/bump';
 
@@ -199,6 +200,36 @@ async function updateAll(uri: vscode.Uri, level: BumpKind): Promise<void> {
   if (doc) await offerInstall(doc, pmFor(uri));
 }
 
+/** Groups every available upgrade by risk (safe / caution / major) and shows it as Markdown, with save and copy. */
+async function upgradeReport(arg?: WithUri | vscode.Uri): Promise<void> {
+  let uri = arg instanceof vscode.Uri ? arg : arg?.uri;
+  if (!uri) {
+    const projects = await findProjects();
+    if (!projects.length) return void vscode.window.showInformationMessage('No package.json found in the workspace.');
+    uri =
+      projects.length === 1
+        ? projects[0]
+        : (await vscode.window.showQuickPick(projects.map((p) => ({ label: vscode.workspace.asRelativePath(p), uri: p })), { placeHolder: 'Create the upgrade report for…' }))?.uri;
+    if (!uri) return;
+  }
+  const target = uri;
+  const st = states.get(target.toString()) ?? (await scanUri(target));
+  if (!st) return;
+  const { markdown } = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Pkg Guard: building upgrade report…' }, () =>
+    generateUpgradeReport(readText(target).text, target.fsPath, st.result, st.findings, settings()),
+  );
+  await showMarkdown(markdown);
+  const pick = await vscode.window.showInformationMessage('Upgrade report ready.', 'Save as…', 'Copy');
+  if (pick === 'Copy') {
+    await vscode.env.clipboard.writeText(markdown);
+  } else if (pick === 'Save as…') {
+    const file = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(path.join(path.dirname(target.fsPath), 'UPGRADE_REPORT.md')), filters: { Markdown: ['md'] } });
+    if (!file) return;
+    await vscode.workspace.fs.writeFile(file, Buffer.from(markdown, 'utf8'));
+    await vscode.window.showTextDocument(file);
+  }
+}
+
 /** Applies every vulnerability fix: direct dependencies are bumped, transitive ones are pinned via resolutions / overrides. */
 async function fixVulns(uri: vscode.Uri): Promise<void> {
   const st = states.get(uri.toString()) ?? (await scanUri(uri));
@@ -269,6 +300,7 @@ export function registerCommands(ctx: vscode.ExtensionContext, refresh: () => vo
   reg('pkgGuard.updateAllMinor', (n: WithUri) => updateAll(uriOf(n), 'minor'));
   reg('pkgGuard.updateAllMajor', (n: WithUri) => updateAll(uriOf(n), 'major'));
   reg('pkgGuard.addDependency', (n: WithUri) => addDependency(uriOf(n)));
+  reg('pkgGuard.upgradeReport', (n?: WithUri) => upgradeReport(n));
 
   reg('pkgGuard.runScript', (n: ScriptNode) => {
     const pm = pmFor(n.uri);

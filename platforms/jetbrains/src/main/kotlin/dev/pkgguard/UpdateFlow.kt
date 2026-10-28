@@ -3,6 +3,9 @@ package dev.pkgguard
 import com.intellij.ide.BrowserUtil
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.components.service
+import com.intellij.openapi.fileChooser.FileChooserFactory
+import com.intellij.openapi.fileChooser.FileSaverDescriptor
+import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
@@ -10,6 +13,8 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
 import java.awt.Dimension
+import java.awt.datatransfer.StringSelection
+import java.awt.event.ActionEvent
 import javax.swing.JComponent
 
 /** Read-only text in a dialog: compatibility reports and release notes. */
@@ -25,6 +30,36 @@ fun showText(project: Project, title: String, text: String) {
             JBScrollPane(JBTextArea(text).apply { isEditable = false; lineWrap = true; wrapStyleWord = true; caretPosition = 0 }).apply { preferredSize = Dimension(720, 460) }
 
         override fun createActions() = arrayOf(okAction)
+    }.show()
+}
+
+/** The upgrade report as text, with Copy and Save as… next to Close. */
+private fun showReport(project: Project, title: String, markdown: String) {
+    object : DialogWrapper(project, true) {
+        init {
+            this.title = title
+            setOKButtonText("Close")
+            init()
+        }
+
+        override fun createCenterPanel(): JComponent =
+            JBScrollPane(JBTextArea(markdown).apply { isEditable = false; caretPosition = 0 }).apply { preferredSize = Dimension(900, 560) }
+
+        override fun createActions() = arrayOf(
+            object : DialogWrapperAction("Copy") {
+                override fun doAction(e: ActionEvent?) = CopyPasteManager.getInstance().setContents(StringSelection(markdown))
+            },
+            object : DialogWrapperAction("Save as…") {
+                override fun doAction(e: ActionEvent?) {
+                    val target = FileChooserFactory.getInstance()
+                        .createSaveFileDialog(FileSaverDescriptor("Save Upgrade Report", "Markdown file", "md"), project)
+                        .save(null as VirtualFile?, "UPGRADE_REPORT.md") ?: return
+                    target.file.writeText(markdown)
+                    notify(project, "Saved ${target.file.name}.")
+                }
+            },
+            okAction,
+        )
     }.show()
 }
 
@@ -100,6 +135,15 @@ object UpdateFlow {
         val warn = if (level == "major") "\n\nMajor updates can contain breaking changes. Check single packages first with \"Check compatibility\"." else ""
         val ok = Messages.showOkCancelDialog(project, lines.joinToString("\n") + warn, "Update ${updates.size} dependencies ($level)?", "Update ${updates.size}", "Cancel", Messages.getWarningIcon())
         if (ok == Messages.OK) applyRanges(project, file, updates, st.pm)
+    }
+
+    /** Every available upgrade grouped by risk (safe / caution / major), built by the sidecar. */
+    fun upgradeReport(project: Project, file: VirtualFile) {
+        val svc = project.service<PkgGuardService>()
+        val res = withModalProgress(project, "Building upgrade report…") {
+            svc.sidecar.call<UpgradeReportResponse>("upgradeReport", mapOf("text" to svc.textOf(file), "pkgFile" to file.path, "settings" to svc.settings.forSidecar(project)))
+        } ?: return
+        showReport(project, "Upgrade report — ${file.parent?.name ?: file.name}", res.markdown)
     }
 
     /** Pick one newer version (or everything up to the newest) and show its release notes. */

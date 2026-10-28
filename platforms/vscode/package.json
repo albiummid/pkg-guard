@@ -98,6 +98,12 @@
         "category": "Pkg Guard"
       },
       {
+        "command": "pkgGuard.upgradeReport",
+        "title": "Upgrade report",
+        "category": "Pkg Guard",
+        "icon": "$(checklist)"
+      },
+      {
         "command": "pkgGuard.updatePatch",
         "title": "Update to newest patch",
         "category": "Pkg Guard",
@@ -361,6 +367,11 @@
           "command": "pkgGuard.updateAllMajor",
           "when": "view == pkgGuard.packages && viewItem == project",
           "group": "1_modify@5"
+        },
+        {
+          "command": "pkgGuard.upgradeReport",
+          "when": "view == pkgGuard.packages && viewItem == project",
+          "group": "1_modify@6"
         },
         {
           "command": "pkgGuard.openPackageJson",

@@ -138,6 +138,7 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                     act("Update all — patch") { UpdateFlow.updateAll(project, node.file, "patch") },
                     act("Update all — minor") { UpdateFlow.updateAll(project, node.file, "minor") },
                     act("Update all — major") { UpdateFlow.updateAll(project, node.file, "major") },
+                    act("Upgrade report…") { UpdateFlow.upgradeReport(project, node.file) },
                     act("Open package.json") { open(node.file, 0, 0) },
                 )
             }

@@ -129,6 +129,7 @@ export class PackagesTree implements vscode.TreeDataProvider<Node> {
         a('Update all — patch', 'chevron-up', 'pkgGuard.updateAllPatch', 'x.y.Z'),
         a('Update all — minor', 'fold-up', 'pkgGuard.updateAllMinor', 'x.Y.z, includes patch'),
         a('Update all — major', 'rocket', 'pkgGuard.updateAllMajor', 'X.y.z, may break'),
+        a('Upgrade report', 'checklist', 'pkgGuard.upgradeReport', 'safe, caution and major upgrades'),
         a('Add dependency…', 'add', 'pkgGuard.addDependency'),
         a('Re-scan vulnerabilities & updates', 'refresh', 'pkgGuard.rescanProject'),
         a('Open package.json', 'go-to-file', 'pkgGuard.openPackageJson'),

@@ -3,6 +3,7 @@
 import * as readline from 'readline';
 import { bumpTargets } from '../updates/bump';
 import { formatReport } from '../updates/compat';
+import { generateUpgradeReport } from '../updates/report';
 import { RangeUpdate, compatFor, fixEffect, latestStable, rangeEdits } from '../fixes/fixes';
 import { Fix, buildFindings } from '../scan/findings';
 import { clearOsvCache } from '../vulnerabilities/osv';
@@ -38,6 +39,12 @@ async function doScan(p: Params) {
   };
 }
 
+async function doUpgradeReport(p: Params) {
+  const settings = p.settings as Settings;
+  const result = await scan(p.text, p.pkgFile, settings);
+  return generateUpgradeReport(p.text, p.pkgFile, result, buildFindings(result, settings), settings);
+}
+
 async function doCompat(p: Params) {
   const info = await fetchInfo(p.name, p.registry);
   if (!info) throw new Error(`Could not read ${p.name} from the registry.`);
@@ -70,6 +77,7 @@ const methods: Record<string, (p: Params) => unknown | Promise<unknown>> = {
   ping: () => 'pong',
   scan: doScan,
   compat: doCompat,
+  upgradeReport: doUpgradeReport,
   versions: doVersions,
   changelog: doChangelog,
   repoUrl: doRepoUrl,

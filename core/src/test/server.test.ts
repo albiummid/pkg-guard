@@ -46,6 +46,14 @@ test('server: ping, rangeEdits, errors keep the request id', async () => {
   assert.equal(JSON.parse(await handle('not json')).id, null);
 });
 
+test('server: upgradeReport offline returns a report and markdown', async () => {
+  const settings = { enableVulnerabilities: false, checkTransitive: false, enableOutdated: false, showMajorUpdates: false, minSeverity: 'low', auditFallback: false, registry: 'https://registry.npmjs.org', ignoredAdvisories: [], ignoredPackages: [] };
+  const r = JSON.parse(await handle(JSON.stringify({ id: 5, method: 'upgradeReport', params: { text: PKG, pkgFile: 'D:/nowhere/package.json', settings } })));
+  assert.equal(r.id, 5);
+  assert.deepEqual(r.result.report.rows, []);
+  assert.match(r.result.markdown, /^# Upgrade report/);
+});
+
 test('server: scan offline returns findings, installed versions and pm', async () => {
   const settings = { enableVulnerabilities: false, checkTransitive: false, enableOutdated: false, showMajorUpdates: false, minSeverity: 'low', auditFallback: false, registry: 'https://registry.npmjs.org', ignoredAdvisories: [], ignoredPackages: [] };
   const r = JSON.parse(await handle(JSON.stringify({ id: 4, method: 'scan', params: { text: PKG, pkgFile: 'D:/nowhere/package.json', settings } })));

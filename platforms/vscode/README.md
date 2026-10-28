@@ -24,6 +24,7 @@ Every `package.json` in the workspace (monorepos included) appears as a project:
 - **Needs attention**: only the vulnerable or outdated dependencies.
 - **dependencies / devDependencies / optionalDependencies** with installed version and fix hints.
 - **Project actions**: install all, update all within the current major, add dependency, re-scan.
+- **Upgrade report**: one Markdown report per project that groups available upgrades into safe (no breaking changes expected), needs caution (0.x minors, peer or Node-engine conflicts) and major, flags security fixes and deprecated packages, and includes a ready-to-run install command per group. Save or copy it from the notification.
 - **Per dependency** (inline buttons and right-click): update to latest or a chosen version, open the npm page or repository, show the changelog, check compatibility, remove.
 
 ### Compatibility check
