@@ -7,7 +7,7 @@
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",
     "build:server": "esbuild src/server/server.ts --bundle --platform=node --target=node18 --outfile=dist/server.js",
-    "test": "tsc -p . && node --test \"out/test/*.test.js\""
+    "test": "tsc -p . && node --test out/test/*.test.js"
   },
   "devDependencies": {
     "@types/node": "22",
