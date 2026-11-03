@@ -5,6 +5,7 @@
   "version": "0.1.3",
   "publisher": "local",
   "license": "MIT",
+  "icon": "media/logo.png",
   "private": true,
   "engines": {
     "vscode": "^1.85.0"
@@ -563,7 +564,7 @@
     "compile": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --sourcemap --outfile=dist/extension.js",
     "watch": "yarn compile --watch",
     "vscode:prepublish": "yarn typecheck && yarn compile",
-    "package": "vsce package --no-dependencies && node scripts/copy-output.js"
+    "package": "node scripts/copy-assets.js && vsce package --no-dependencies && node scripts/copy-output.js"
   },
   "devDependencies": {
     "@types/node": "22",
