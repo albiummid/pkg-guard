@@ -223,7 +223,7 @@ function runCore(args) {
     if (task !== 'test') return 0;
   }
   if (task === 'test') {
-    const testDir = path.join(core, 'out', 'test');
+    const testDir = path.join(core, 'dist', 'test');
     const testFiles = fs.readdirSync(testDir).filter((name) => name.endsWith('.test.js')).map((name) => path.join(testDir, name));
     run(['--test', ...testFiles]);
     return 0;
@@ -234,7 +234,7 @@ function runCore(args) {
       bundle: true,
       platform: 'node',
       target: `node${readVersionConfig()['node.target']}`,
-      outfile: path.join(core, 'dist/server.js'),
+      outfile: path.join(core, 'dist/sidecar/server.js'),
     });
     return 0;
   }

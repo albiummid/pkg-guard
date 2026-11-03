@@ -4,7 +4,6 @@ node_modules/
 # build output
 build/
 dist/
-out/
 output/
 *.vsix
 *.zip

@@ -87,7 +87,7 @@ First it requires a clean `master` that is up to date with `origin` and runs the
 
 ## Adding a new platform
 
-Create `platforms/<name>/`, run the sidecar from `dist/server.js` (see the layout section of [README.md](README.md) for the protocol), copy its final artifact to `output/<name>/`, and add it to the targets list in `scripts/cli.js`.
+Create `platforms/<name>/`, run the sidecar from `dist/sidecar/server.js` (see the layout section of [README.md](README.md) for the protocol), copy its final artifact to `output/<name>/`, and add it to the targets list in `scripts/cli.js`.
 
 ## License
 

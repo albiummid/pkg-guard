@@ -44,11 +44,11 @@ val buildServer by tasks.registering(Exec::class) {
     workingDir = repoRoot
     commandLine(if (isWindows) listOf("cmd", "/c", "node", "scripts/cli.js", "core", "build:server") else listOf("node", "scripts/cli.js", "core", "build:server"))
     inputs.dir(coreDir.resolve("src"))
-    outputs.file(coreDir.resolve("dist/server.js"))
+    outputs.file(coreDir.resolve("dist/sidecar/server.js"))
 }
 val copyServer by tasks.registering(Copy::class) {
     dependsOn(buildServer)
-    from(coreDir.resolve("dist/server.js"))
+    from(coreDir.resolve("dist/sidecar/server.js"))
     into(layout.buildDirectory.dir("generated/pkgguard-resources/pkgguard"))
 }
 val copyPluginLogo by tasks.registering(Copy::class) {

@@ -46,7 +46,7 @@ A new IDE or language gets its own folder under `platforms/` and reuses `src/`.
 | `test/` | Unit tests |
 
 - `src/server.ts` is a Node sidecar speaking line-delimited JSON-RPC over stdin/stdout (`scan`, `fixEffect`, `rangeEdits`, `compat`, `changelog`, `repoUrl`, `clearCache`). A new IDE or language integration only needs to spawn it and speak this protocol.
-- `yarn cli core build:server` writes `dist/server.js`; `yarn cli core test` runs the unit tests.
+- `yarn cli core build:server` writes the bundled sidecar to `dist/sidecar/server.js`; `yarn cli core test` runs the unit tests.
 
 ## Development
 
