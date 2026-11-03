@@ -67,11 +67,11 @@ function editVersionFiles(args) {
       value.version = config.version;
       value.devDependencies['@types/vscode'] = config['vscode.types'];
     })],
-    ['src/platforms/vscode/package.json', (text) => editJson(text, (value) => {
+    ['platforms/vscode/package.json', (text) => editJson(text, (value) => {
       value.version = config.version;
       value.engines.vscode = `^${config['vscode.engine']}`;
     })],
-    ['src/platforms/jetbrains/gradle.properties', (text) => {
+    ['platforms/jetbrains/gradle.properties', (text) => {
       const props = {
         version: config.version,
         'pkgguard.sinceBuild': config['jetbrains.sinceBuild'],
@@ -214,7 +214,7 @@ function runStep(title, command, cwd = '.') {
 
 function runCore(args) {
   const task = args[0];
-  const core = path.join(root, 'core');
+  const core = root;
   const tsc = path.resolve(path.dirname(require.resolve('typescript')), '../bin/tsc');
   const run = (nodeArgs) => execFileSync(process.execPath, nodeArgs, { cwd: root, stdio: 'inherit' });
 
@@ -230,7 +230,7 @@ function runCore(args) {
   }
   if (task === 'build:server') {
     require('esbuild').buildSync({
-      entryPoints: [path.join(core, 'src/server/server.ts')],
+      entryPoints: [path.join(core, 'src/server.ts')],
       bundle: true,
       platform: 'node',
       target: `node${readVersionConfig()['node.target']}`,

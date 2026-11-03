@@ -22,13 +22,13 @@ Incorrect or missing advisories come from [OSV.dev](https://osv.dev), so report 
 
 | Folder | Contents |
 |---|---|
-| `core/` | Shared TypeScript logic and the JSON-RPC sidecar. Most features and fixes belong here so every IDE gets them. |
-| `src/platforms/vscode/` | VS Code extension (UI only; calls into `core/`). |
-| `src/platforms/jetbrains/` | JetBrains plugin in Kotlin (UI only; talks to the sidecar). |
+| `src/` | Shared TypeScript logic and the JSON-RPC sidecar. Most features and fixes belong here so every IDE gets them. |
+| `platforms/vscode/` | VS Code extension (UI only; calls into `src/`). |
+| `platforms/jetbrains/` | JetBrains plugin in Kotlin (UI only; talks to the sidecar). |
 
-Inside `core/src/`, code is grouped by feature: `utils/`, `manifest/`, `vulnerabilities/`, `updates/`, `changelog/`, `scan/`, `fixes/`, `server/`. Put new code in the matching folder, or add a new feature folder. See [`core/README.md`](core/README.md).
+Inside `src/`, code is grouped by role: `types/`, `versions/`, `manifest/`, `sources/`, `analysis/`, plus `server.ts` and `test/`. Keep the dependency direction in mind: `sources/` and `analysis/` may import from `types/`, `versions/` and `manifest/`, never the reverse. See the layout section of [README.md](README.md).
 
-If you add or change a sidecar method, update the Kotlin types in `src/platforms/jetbrains/src/main/kotlin/dev/pkgguard/Model.kt` by hand. They mirror the TypeScript shapes and are not generated yet.
+If you add or change a sidecar method, update the Kotlin types in `platforms/jetbrains/src/main/kotlin/dev/pkgguard/Model.kt` by hand. They mirror the TypeScript shapes and are not generated yet.
 
 ## Setup
 
@@ -38,14 +38,14 @@ Requirements: Node.js 24, yarn 1.x, and JDK 17 (JetBrains plugin only).
 yarn install                                         # root CLI and VS Code workspace tools
 yarn cli core test                                   # shared logic + tests
 yarn cli vscode typecheck                           # VS Code extension
-cd src/platforms/jetbrains && ./gradlew runIde      # sandbox IDE
+cd platforms/jetbrains && ./gradlew runIde      # sandbox IDE
 ```
 
 Build artifacts land in `output/` (git-ignored):
 
 ```bash
 yarn cli vscode package                             # -> output/vscode/*.vsix
-cd src/platforms/jetbrains && ./gradlew buildPlugin # -> output/jetbrains/*.zip
+cd platforms/jetbrains && ./gradlew buildPlugin # -> output/jetbrains/*.zip
 ```
 
 ## Making a change
@@ -53,10 +53,10 @@ cd src/platforms/jetbrains && ./gradlew buildPlugin # -> output/jetbrains/*.zip
 1. Open or comment on an issue first for anything larger than a small fix, so we agree on the approach.
 2. Branch from `master`: `feat/<short-name>` or `fix/<short-name>`.
 3. Keep the change focused. Match the surrounding style and comment density.
-4. Add or update tests in `core/src/test/` for logic changes. Run `yarn cli core test`.
+4. Add or update tests in `src/test/` for logic changes. Run `yarn cli core test`.
 5. Run `yarn cli vscode typecheck` if you touched TypeScript used by the extension.
-6. If you touched the sidecar or `core/`, build the JetBrains plugin once to confirm it still bundles.
-7. Update the READMEs when behaviour or settings change. New settings go in `src/platforms/vscode/package.json`, the JetBrains settings page, and the settings table in `src/platforms/vscode/README.md`.
+6. If you touched the sidecar or `src/`, build the JetBrains plugin once to confirm it still bundles.
+7. Update the READMEs when behaviour or settings change. New settings go in `platforms/vscode/package.json`, the JetBrains settings page, and the settings table in `platforms/vscode/README.md`.
 
 ### Versions
 
@@ -76,7 +76,7 @@ yarn cli release patch --push    # or minor / major / x.y.z
 
 First it requires a clean `master` that is up to date with `origin` and runs the core tests, the VS Code typecheck and the version and changelog checks (`--skip-checks` skips them; `--help` shows usage). If any check fails, nothing is changed. Then it bumps `version.yml`, stamps every platform, updates `CHANGELOG.md`, commits `chore: release vX.Y.Z`, tags it and pushes. The tag starts `.github/workflows/release.yml`, which checks the tag against `version.yml` and the changelog, runs the tests, builds the `.vsix` and the plugin zip, and attaches both to a GitHub release whose notes are that version's section of `CHANGELOG.md` (tags with a `-` suffix are marked as pre-releases).
 
-**Changelog.** `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com): an `## [Unreleased]` section, then `## [x.y.z] - YYYY-MM-DD` sections with optional `### New Feature`, `### Improvements`, and `### Fixes` groups. Write user-facing entries under Unreleased as changes land; `yarn cli release` moves them under the new version. If Unreleased is empty, it builds the entries from Conventional Commit subjects since the last tag (`feat` → New Feature, `fix` → Fixes, `perf`/`refactor`/`revert` → Improvements; `docs`, `chore`, `test` and `ci` are left out; `!` marks a breaking change). Curated entries read better, so prefer writing them. `yarn cli changelog --check` validates the format and runs in CI. It then publishes only the stores whose secret exists: `VSCE_PAT` (VS Code Marketplace), `OVSX_PAT` (Open VSX), `JETBRAINS_PUBLISH_TOKEN` (JetBrains Marketplace). Before the first Marketplace publish, set a real `publisher` in `src/platforms/vscode/package.json` (it is `local` today). Pull requests and pushes to `master` run `.github/workflows/ci.yml` (version sync, core tests, VS Code typecheck and package, JetBrains build).
+**Changelog.** `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com): an `## [Unreleased]` section, then `## [x.y.z] - YYYY-MM-DD` sections with optional `### New Feature`, `### Improvements`, and `### Fixes` groups. Write user-facing entries under Unreleased as changes land; `yarn cli release` moves them under the new version. If Unreleased is empty, it builds the entries from Conventional Commit subjects since the last tag (`feat` → New Feature, `fix` → Fixes, `perf`/`refactor`/`revert` → Improvements; `docs`, `chore`, `test` and `ci` are left out; `!` marks a breaking change). Curated entries read better, so prefer writing them. `yarn cli changelog --check` validates the format and runs in CI. It then publishes only the stores whose secret exists: `VSCE_PAT` (VS Code Marketplace), `OVSX_PAT` (Open VSX), `JETBRAINS_PUBLISH_TOKEN` (JetBrains Marketplace). Before the first Marketplace publish, set a real `publisher` in `platforms/vscode/package.json` (it is `local` today). Pull requests and pushes to `master` run `.github/workflows/ci.yml` (version sync, core tests, VS Code typecheck and package, JetBrains build).
 
 ### Commits and pull requests
 
@@ -87,7 +87,7 @@ First it requires a clean `master` that is up to date with `origin` and runs the
 
 ## Adding a new platform
 
-Create `src/platforms/<name>/`, run the sidecar from `core/dist/server.js` (see [`core/README.md`](core/README.md) for the protocol), copy its final artifact to `output/<name>/`, and add it to the targets list in `scripts/cli.js`.
+Create `platforms/<name>/`, run the sidecar from `dist/server.js` (see the layout section of [README.md](README.md) for the protocol), copy its final artifact to `output/<name>/`, and add it to the targets list in `scripts/cli.js`.
 
 ## License
 

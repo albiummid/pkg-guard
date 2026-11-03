@@ -9,7 +9,7 @@
 ## Checklist
 
 - [ ] `yarn cli core test` passes
-- [ ] `yarn typecheck` passes in `src/platforms/vscode` (if extension code changed)
-- [ ] JetBrains plugin still builds (if `core/` or the sidecar changed)
+- [ ] `yarn typecheck` passes in `platforms/vscode` (if extension code changed)
+- [ ] JetBrains plugin still builds (if `src/` or the sidecar changed)
 - [ ] READMEs / settings docs updated if behaviour changed
 - [ ] No manual version edits (use `version.yml`)

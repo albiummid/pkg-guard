@@ -17,8 +17,8 @@ Vulnerability warnings and update suggestions right inside your `package.json`, 
 
 | IDE | Package | Guide |
 |---|---|---|
-| VS Code | `.vsix` | [src/platforms/vscode](src/platforms/vscode) |
-| WebStorm / IntelliJ IDEA | plugin `.zip` | [src/platforms/jetbrains](src/platforms/jetbrains) |
+| VS Code | `.vsix` | [platforms/vscode](platforms/vscode) |
+| WebStorm / IntelliJ IDEA | plugin `.zip` | [platforms/jetbrains](platforms/jetbrains) |
 
 Fixes only edit `package.json`; run your package manager afterwards to refresh the lockfile.
 
@@ -26,13 +26,27 @@ Fixes only edit `package.json`; run your package manager afterwards to refresh t
 
 | Folder | Contents |
 |---|---|
-| [`core/`](core) | Shared TypeScript logic and the JSON-RPC sidecar used by every platform |
-| [`src/platforms/vscode/`](src/platforms/vscode) | VS Code extension |
-| [`src/platforms/jetbrains/`](src/platforms/jetbrains) | WebStorm / IntelliJ plugin (Kotlin) |
+| [`src/`](src) | Shared TypeScript logic and the JSON-RPC sidecar used by every platform |
+| [`platforms/vscode/`](platforms/vscode) | VS Code extension |
+| [`platforms/jetbrains/`](platforms/jetbrains) | WebStorm / IntelliJ plugin (Kotlin) |
 | [`docs/media/`](docs/media) | Demo GIFs used in the READMEs |
 | `output/` | Build artifacts (git-ignored) |
 
-A new IDE or language gets its own folder under `src/platforms/` and reuses `core/`.
+A new IDE or language gets its own folder under `platforms/` and reuses `src/`.
+
+### Shared engine (`src/`)
+
+| Folder | Purpose |
+|---|---|
+| `types/` | Shared type definitions, one file per domain |
+| `versions/` | Semver, range matching and bump targets (pure, no I/O) |
+| `manifest/` | package.json parsing and editing, package-manager detection |
+| `sources/` | npm registry, changelog, OSV, audit output and lockfile graphs |
+| `analysis/` | Scan, findings, compatibility, fixes and the upgrade report |
+| `test/` | Unit tests |
+
+- `src/server.ts` is a Node sidecar speaking line-delimited JSON-RPC over stdin/stdout (`scan`, `fixEffect`, `rangeEdits`, `compat`, `changelog`, `repoUrl`, `clearCache`). A new IDE or language integration only needs to spawn it and speak this protocol.
+- `yarn cli core build:server` writes `dist/server.js`; `yarn cli core test` runs the unit tests.
 
 ## Development
 
@@ -47,7 +61,7 @@ yarn cli core test
 yarn cli vscode package
 
 # JetBrains plugin -> output/jetbrains/*.zip
-cd src/platforms/jetbrains && ./gradlew buildPlugin
+cd platforms/jetbrains && ./gradlew buildPlugin
 ```
 
 ### Versions
@@ -61,7 +75,7 @@ yarn cli version                 # re-sync after editing version.yml
 yarn cli version --check         # fail if a file is out of sync
 ```
 
-When adding a platform, add it to the targets list in `scripts/cli.js`. The Kotlin and IntelliJ Gradle plugin versions stay in `src/platforms/jetbrains/build.gradle.kts` because the `plugins {}` block can't read properties.
+When adding a platform, add it to the targets list in `scripts/cli.js`. The Kotlin and IntelliJ Gradle plugin versions stay in `platforms/jetbrains/build.gradle.kts` because the `plugins {}` block can't read properties.
 
 ## Contributing
 

@@ -43,7 +43,7 @@ jobs:
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
       - run: bash ./gradlew buildPlugin --no-daemon
-        working-directory: src/platforms/jetbrains
+        working-directory: platforms/jetbrains
       - uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -131,4 +131,4 @@ jobs:
         if: steps.gate.outputs.has_token == 'true'
       - run: bash ./gradlew publishPlugin --no-daemon
         if: steps.gate.outputs.has_token == 'true'
-        working-directory: src/platforms/jetbrains
+        working-directory: platforms/jetbrains
