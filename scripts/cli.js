@@ -273,6 +273,26 @@ function runVscode(args) {
   return 0;
 }
 
+function runJetbrains(args) {
+  const [task, ...gradleArgs] = args;
+  const tasks = { build: 'buildPlugin', run: 'runIde', verify: 'verifyPlugin' };
+  if (!tasks[task]) throw new Error('Usage: yarn cli jetbrains build|run|verify [gradle arguments, e.g. --no-daemon]');
+  // The Gradle build also bundles the Node sidecar (yarn cli core build:server) into the plugin.
+  const dir = path.join(root, 'platforms/jetbrains');
+  const gradlew = `"${path.join(dir, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew')}"`;
+  execSync([gradlew, tasks[task], ...gradleArgs].join(' '), { cwd: dir, stdio: 'inherit' });
+  if (task === 'build') console.log('\nPlugin zip written to output/jetbrains/.');
+  return 0;
+}
+
+function runBuild(args) {
+  const target = args[0] ?? 'all';
+  if (!['vscode', 'jetbrains', 'all'].includes(target)) throw new Error('Usage: yarn cli build [vscode|jetbrains|all]');
+  if (target !== 'jetbrains') runVscode(['package']);
+  if (target !== 'vscode') runJetbrains(['build']);
+  return 0;
+}
+
 function prepareRelease(args) {
   const flags = new Set(args.filter((arg) => arg.startsWith('--')));
   const bump = args.find((arg) => !arg.startsWith('--'));
@@ -337,7 +357,9 @@ async function interactive() {
       { value: 'version', label: 'Sync or bump versions' },
       { value: 'changelog', label: 'Check changelog format' },
       { value: 'core', label: 'Build or test shared core' },
+      { value: 'build', label: 'Build VS Code and / or JetBrains packages' },
       { value: 'vscode', label: 'Check, package or install VS Code extension' },
+      { value: 'jetbrains', label: 'Build, run or verify JetBrains plugin' },
       { value: 'release', label: 'Prepare a release' },
     ],
   });
@@ -367,6 +389,22 @@ async function interactive() {
     if (p.isCancel(action)) return p.cancel('Cancelled.');
     return runVscode([action]);
   }
+  if (task === 'build') {
+    const target = await p.select({ message: 'Choose what to build', options: [
+      { value: 'all', label: 'Both (output/vscode + output/jetbrains)' }, { value: 'vscode', label: 'VS Code .vsix' },
+      { value: 'jetbrains', label: 'JetBrains plugin .zip' },
+    ] });
+    if (p.isCancel(target)) return p.cancel('Cancelled.');
+    return runBuild([target]);
+  }
+  if (task === 'jetbrains') {
+    const action = await p.select({ message: 'Choose a JetBrains task', options: [
+      { value: 'build', label: 'Build plugin zip' }, { value: 'run', label: 'Run a sandbox IDE with the plugin' },
+      { value: 'verify', label: 'Run the plugin verifier' },
+    ] });
+    if (p.isCancel(action)) return p.cancel('Cancelled.');
+    return runJetbrains([action]);
+  }
   const bump = await p.select({ message: 'Choose a release version bump', options: [
     { value: 'patch', label: 'Patch' }, { value: 'minor', label: 'Minor' }, { value: 'major', label: 'Major' },
   ] });
@@ -380,13 +418,15 @@ async function main() {
   const [command, ...args] = process.argv.slice(2);
   if (!command) { process.exitCode = await interactive(); return; }
   if (command === '--help' || command === '-h') {
-    console.log('Usage: yarn cli [version|changelog|core|vscode|release] [arguments]\nRun without arguments to choose a task interactively.');
+    console.log('Usage: yarn cli [version|changelog|core|build|vscode|jetbrains|release] [arguments]\nRun without arguments to choose a task interactively.');
     return;
   }
   const status = command === 'version' ? editVersionFiles(args)
     : command === 'changelog' ? manageChangelog(args)
       : command === 'core' ? runCore(args)
+        : command === 'build' ? runBuild(args)
         : command === 'vscode' ? runVscode(args)
+        : command === 'jetbrains' ? runJetbrains(args)
       : command === 'release' ? prepareRelease(args) : undefined;
   if (status === undefined) throw new Error(`Unknown task: ${command}`);
   process.exitCode = status;

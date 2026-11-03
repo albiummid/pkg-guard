@@ -38,7 +38,7 @@ Requirements: Node.js 24, yarn 1.x, and JDK 17 (JetBrains plugin only).
 yarn install                                         # root CLI and VS Code workspace tools
 yarn cli core test                                   # shared logic + tests
 yarn cli vscode typecheck                           # VS Code extension
-cd platforms/jetbrains && ./gradlew runIde      # sandbox IDE
+yarn cli jetbrains run                              # sandbox IDE with the plugin
 ```
 
 Build artifacts land in `output/` (git-ignored):
@@ -46,7 +46,8 @@ Build artifacts land in `output/` (git-ignored):
 ```bash
 yarn cli vscode package                             # -> output/vscode/*.vsix
 yarn cli vscode install                             # package, then install into VS Code (--profile <name>, --editor <command>)
-cd platforms/jetbrains && ./gradlew buildPlugin # -> output/jetbrains/*.zip
+yarn cli jetbrains build                            # -> output/jetbrains/*.zip
+yarn cli build                                      # both (or: yarn cli build vscode | jetbrains)
 ```
 
 ## Making a change

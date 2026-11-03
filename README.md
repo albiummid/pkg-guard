@@ -67,7 +67,13 @@ yarn cli vscode package
 yarn cli vscode install
 
 # JetBrains plugin -> output/jetbrains/*.zip
-cd platforms/jetbrains && ./gradlew buildPlugin
+yarn cli jetbrains build
+
+# both packages at once (or: yarn cli build vscode | jetbrains)
+yarn cli build
+
+# try the JetBrains plugin in a sandbox IDE
+yarn cli jetbrains run
 ```
 
 `yarn cli vscode install` runs the `code` command (falling back to `code-insiders`). Pass `--editor <command>` to use another one, or `--profile <name>` to install into a specific VS Code profile. Reload the window afterwards (*Developer: Reload Window*). To try unreleased code without installing, open `platforms/vscode` in VS Code and press F5.
