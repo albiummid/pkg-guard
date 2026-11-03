@@ -20,9 +20,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - run: node scripts/set-version.js --check
-      - run: node scripts/changelog.js --check
+          node-version: 24
+          cache: yarn
+          cache-dependency-path: yarn.lock
+      - run: yarn install --frozen-lockfile
+      - run: node scripts/cli.js version --check
+      - run: node scripts/cli.js changelog --check
 
   core:
     name: Core tests
@@ -31,7 +34,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: yarn
           cache-dependency-path: core/yarn.lock
       - run: yarn install --frozen-lockfile
@@ -46,7 +49,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: yarn
           cache-dependency-path: platforms/vscode/yarn.lock
       - run: yarn install --frozen-lockfile
@@ -68,7 +71,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: yarn
           cache-dependency-path: core/yarn.lock
       # the Gradle build bundles the sidecar with `yarn build:server` from core/

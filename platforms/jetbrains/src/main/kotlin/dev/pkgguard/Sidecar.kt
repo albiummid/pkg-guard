@@ -44,7 +44,7 @@ class Sidecar(private val project: Project) : Disposable {
         val p = try {
             GeneralCommandLine(node, extractScript().toString()).withCharset(UTF_8).createProcess()
         } catch (e: Exception) {
-            throw IllegalStateException("Could not start Node.js (\"$node\"). Install Node 18+ or set its path in Settings | Tools | Pkg Guard. ${e.message}", e)
+            throw IllegalStateException("Could not start Node.js (\"$node\"). Install Node 24+ or set its path in Settings | Tools | Pkg Guard. ${e.message}", e)
         }
         proc = p
         stdin = p.outputStream.bufferedWriter(UTF_8)

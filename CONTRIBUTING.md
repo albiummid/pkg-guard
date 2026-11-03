@@ -32,7 +32,7 @@ If you add or change a sidecar method, update the Kotlin types in `platforms/jet
 
 ## Setup
 
-Requirements: Node.js 18+, yarn 1.x, and JDK 17 (JetBrains plugin only).
+Requirements: Node.js 24, yarn 1.x, and JDK 17 (JetBrains plugin only).
 
 ```bash
 cd core && yarn install && yarn test            # shared logic + tests
@@ -59,24 +59,23 @@ cd platforms/jetbrains && ./gradlew buildPlugin # -> output/jetbrains/*.zip
 
 ### Versions
 
-Never edit versions by hand in `package.json` or `gradle.properties`. Change [`version.yml`](version.yml) and run `node scripts/set-version.js`. Check with `node scripts/set-version.js --check`. Version bumps are done by maintainers at release time, so don't include one in a feature PR.
+Never edit versions by hand in `package.json` or `gradle.properties`. Change [`version.yml`](version.yml) and run `yarn cli version`. Check with `yarn cli version --check`. Version bumps are done by maintainers at release time, so don't include one in a feature PR.
 
-`set-version.js` also takes `patch`, `minor` or `major` to bump from the current version, and `--print` to show it.
+The CLI also accepts `yarn cli version patch|minor|major` to bump from the current version, and `yarn cli version --print` to show it.
 
 ### Releasing (maintainers)
 
 From a clean `master`:
 
 ```bash
-node scripts/release.js patch --push    # or minor / major / x.y.z
-yarn release:patch --push               # same thing; also release:minor and release:major (run from the repo root)
+yarn cli release patch --push    # or minor / major / x.y.z
 ```
 
-`yarn version:patch`, `version:minor` and `version:major` only bump and stamp the version files, without committing or tagging.
+`yarn cli version patch|minor|major` only bump and stamp the version files, without committing or tagging.
 
 First it requires a clean `master` that is up to date with `origin` and runs the core tests, the VS Code typecheck and the version and changelog checks (`--skip-checks` skips them; `--help` shows usage). If any check fails, nothing is changed. Then it bumps `version.yml`, stamps every platform, updates `CHANGELOG.md`, commits `chore: release vX.Y.Z`, tags it and pushes. The tag starts `.github/workflows/release.yml`, which checks the tag against `version.yml` and the changelog, runs the tests, builds the `.vsix` and the plugin zip, and attaches both to a GitHub release whose notes are that version's section of `CHANGELOG.md` (tags with a `-` suffix are marked as pre-releases).
 
-**Changelog.** `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com): an `## [Unreleased]` section, then `## [x.y.z] - YYYY-MM-DD` sections with `### Added / Changed / Deprecated / Removed / Fixed / Security` groups. Write user-facing entries under Unreleased as changes land; the release script moves them under the new version. If Unreleased is empty, it builds the entries from Conventional Commit subjects since the last tag (`feat` → Added, `fix` → Fixed, `perf`/`refactor`/`revert` → Changed; `docs`, `chore`, `test` and `ci` are left out; `!` marks a breaking change). Curated entries read better than generated ones, so prefer writing them. `node scripts/changelog.js --check` validates the format and runs in CI. It then publishes only the stores whose secret exists: `VSCE_PAT` (VS Code Marketplace), `OVSX_PAT` (Open VSX), `JETBRAINS_PUBLISH_TOKEN` (JetBrains Marketplace). Before the first Marketplace publish, set a real `publisher` in `platforms/vscode/package.json` (it is `local` today). Pull requests and pushes to `master` run `.github/workflows/ci.yml` (version sync, core tests, VS Code typecheck and package, JetBrains build).
+**Changelog.** `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com): an `## [Unreleased]` section, then `## [x.y.z] - YYYY-MM-DD` sections with `### Added / Changed / Deprecated / Removed / Fixed / Security` groups. Write user-facing entries under Unreleased as changes land; the release script moves them under the new version. If Unreleased is empty, it builds the entries from Conventional Commit subjects since the last tag (`feat` → Added, `fix` → Fixed, `perf`/`refactor`/`revert` → Changed; `docs`, `chore`, `test` and `ci` are left out; `!` marks a breaking change). Curated entries read better, so prefer writing them. `yarn cli changelog --check` validates the format and runs in CI. It then publishes only the stores whose secret exists: `VSCE_PAT` (VS Code Marketplace), `OVSX_PAT` (Open VSX), `JETBRAINS_PUBLISH_TOKEN` (JetBrains Marketplace). Before the first Marketplace publish, set a real `publisher` in `platforms/vscode/package.json` (it is `local` today). Pull requests and pushes to `master` run `.github/workflows/ci.yml` (version sync, core tests, VS Code typecheck and package, JetBrains build).
 
 ### Commits and pull requests
 
@@ -87,7 +86,7 @@ First it requires a clean `master` that is up to date with `origin` and runs the
 
 ## Adding a new platform
 
-Create `platforms/<name>/`, run the sidecar from `core/dist/server.js` (see [`core/README.md`](core/README.md) for the protocol), copy its final artifact to `output/<name>/`, and add it to the `targets` list in `scripts/set-version.js`.
+Create `platforms/<name>/`, run the sidecar from `core/dist/server.js` (see [`core/README.md`](core/README.md) for the protocol), copy its final artifact to `output/<name>/`, and add it to the targets list in `scripts/cli.js`.
 
 ## License
 

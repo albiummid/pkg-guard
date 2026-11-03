@@ -8,7 +8,7 @@
   "icon": "media/logo.png",
   "private": true,
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.130.0"
   },
   "categories": [
     "Linters",
@@ -561,14 +561,14 @@
   },
   "scripts": {
     "typecheck": "tsc -p . --noEmit",
-    "compile": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --sourcemap --outfile=dist/extension.js",
+    "compile": "esbuild src/extension.ts --bundle --platform=node --target=node24 --external:vscode --sourcemap --outfile=dist/extension.js",
     "watch": "yarn compile --watch",
     "vscode:prepublish": "yarn typecheck && yarn compile",
     "package": "node scripts/copy-assets.js && vsce package --no-dependencies && node scripts/copy-output.js"
   },
   "devDependencies": {
-    "@types/node": "22",
-    "@types/vscode": "1.85.0",
+    "@types/node": "24",
+    "@types/vscode": "1.125.0",
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2"

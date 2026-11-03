@@ -6,7 +6,7 @@
   <description><![CDATA[
     Inline vulnerability warnings and update suggestions in <code>package.json</code>, including transitive
     dependencies. Checks peer dependencies and Node engines before an update and offers companion updates.
-    Requires Node.js 18+ on the machine.
+    Requires Node.js 24+ on the machine.
   ]]></description>
 
   <depends>com.intellij.modules.platform</depends>

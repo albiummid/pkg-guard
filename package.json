@@ -3,14 +3,13 @@
   "private": true,
   "license": "MIT",
   "description": "Repo-level scripts only. The code lives in core/ and platforms/*, each with its own package.json.",
+  "engines": {
+    "node": ">=24.0.0 <25.0.0"
+  },
   "scripts": {
-    "version:check": "node scripts/set-version.js --check",
-    "version:patch": "node scripts/set-version.js patch",
-    "version:minor": "node scripts/set-version.js minor",
-    "version:major": "node scripts/set-version.js major",
-    "changelog:check": "node scripts/changelog.js --check",
-    "release:patch": "node scripts/release.js patch",
-    "release:minor": "node scripts/release.js minor",
-    "release:major": "node scripts/release.js major"
+    "cli": "node scripts/cli.js"
+  },
+  "devDependencies": {
+    "@clack/prompts": "^1.8.1"
   }
 }

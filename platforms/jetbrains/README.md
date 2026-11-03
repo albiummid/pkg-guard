@@ -18,7 +18,7 @@ Vulnerability warnings and update suggestions right inside `package.json`, inclu
 
 ## Requirements
 
-Node.js 18+ on the machine. If it is not found automatically, set its path in *Settings | Tools | Pkg Guard*.
+Node.js 24 or newer on the machine. If it is not found automatically, set its path in *Settings | Tools | Pkg Guard*.
 
 ## Install
 

@@ -52,12 +52,13 @@ cd platforms/jetbrains && ./gradlew buildPlugin
 All versions live in [`version.yml`](version.yml): the product version, minimum VS Code, Node bundle target, and the JetBrains `sinceBuild`, IDE version and JVM.
 
 ```bash
-node scripts/set-version.js 0.2.0   # set the product version and stamp every platform
-node scripts/set-version.js         # re-sync after editing version.yml
-node scripts/set-version.js --check # fail if a file is out of sync
+yarn cli                         # choose a repository task interactively
+yarn cli version 0.2.0           # set the product version and stamp every platform
+yarn cli version                 # re-sync after editing version.yml
+yarn cli version --check         # fail if a file is out of sync
 ```
 
-When adding a platform, add it to the `targets` list in `scripts/set-version.js`. The Kotlin and IntelliJ Gradle plugin versions stay in `platforms/jetbrains/build.gradle.kts` because the `plugins {}` block can't read properties.
+When adding a platform, add it to the targets list in `scripts/cli.js`. The Kotlin and IntelliJ Gradle plugin versions stay in `platforms/jetbrains/build.gradle.kts` because the `plugins {}` block can't read properties.
 
 ## Contributing
 

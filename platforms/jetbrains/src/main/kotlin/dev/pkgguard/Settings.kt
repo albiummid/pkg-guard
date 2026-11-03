@@ -64,7 +64,7 @@ class PkgGuardConfigurable(private val project: Project) : BoundConfigurable("Pk
         val packages = csv(s.ignoredPackages) { s.ignoredPackages = it }
         return panel {
             row("Node executable:") {
-                textField().bindText(s::nodePath).columns(COLUMNS_LARGE).comment("Node.js 18 or newer. Runs the scanner bundled with the plugin.")
+                textField().bindText(s::nodePath).columns(COLUMNS_LARGE).comment("Node.js 24 or newer. Runs the scanner bundled with the plugin.")
             }
             group("Checks") {
                 row { checkBox("Report known vulnerabilities (OSV.dev)").bindSelected(s::enableVulnerabilities) }

@@ -1,11 +1,12 @@
-# Single source of truth for versions. Apply with: node scripts/set-version.js
+# Single source of truth for versions. Apply with: yarn cli version
 version: 0.1.3
 
 vscode:
-  engine: 1.85.0      # minimum VS Code (engines.vscode and @types/vscode)
+  engine: 1.130.0     # minimum VS Code with a Node.js 24 extension host
+  types: 1.125.0      # latest published @types/vscode version below the minimum VS Code engine
 
 node:
-  target: 18          # esbuild target for the sidecar and the extension bundle
+  target: 24          # esbuild target for the sidecar and the extension bundle
 
 jetbrains:
   sinceBuild: 242     # oldest supported IDE build
