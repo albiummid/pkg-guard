@@ -79,7 +79,8 @@ export function buildNpmGraph(json: any, rootDeps: Record<string, string>): Grap
   if (!pk || typeof pk !== 'object') return null;
   const nodes = new Map<string, GNode>();
   for (const [key, p] of Object.entries<any>(pk)) {
-    if (!key || p.link || !p.version) continue;
+    // Workspace members sit under their folder (e.g. "packages/api"), not node_modules, and are not registry packages.
+    if (!key || p.link || !p.version || !key.includes('node_modules/')) continue;
     const name = key.slice(key.lastIndexOf('node_modules/') + 'node_modules/'.length);
     nodes.set(key, { id: key, name, version: p.version, deps: [] });
   }

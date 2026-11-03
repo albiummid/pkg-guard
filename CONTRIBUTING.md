@@ -45,6 +45,7 @@ Build artifacts land in `output/` (git-ignored):
 
 ```bash
 yarn cli vscode package                             # -> output/vscode/*.vsix
+yarn cli vscode install                             # package, then install into VS Code (--profile <name>, --editor <command>)
 cd platforms/jetbrains && ./gradlew buildPlugin # -> output/jetbrains/*.zip
 ```
 

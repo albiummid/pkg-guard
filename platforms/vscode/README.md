@@ -60,4 +60,4 @@ Dependents are checked among your direct dependencies, using their installed `no
 
 ## Building from source
 
-See the [repository README](https://github.com/albiummid/pkg-guard#development).
+See the [repository README](https://github.com/albiummid/pkg-guard#development). To install a local build into VS Code, run `yarn cli vscode install` from the repository root.

@@ -126,6 +126,20 @@ test('npm lock v3 graph resolves nested node_modules', () => {
   assert.deepEqual(g.nodes.get('node_modules/a')!.deps, ['node_modules/a/node_modules/b']);
 });
 
+test('npm lock graph skips workspace members instead of producing nameless packages', () => {
+  const lock = {
+    packages: {
+      '': { workspaces: ['packages/*'] },
+      'node_modules/@demo/api': { resolved: 'packages/api', link: true },
+      'packages/api': { name: '@demo/api', version: '1.0.0', dependencies: { a: '^1' } },
+      'node_modules/a': { version: '1.0.0' },
+    },
+  };
+  const g = buildNpmGraph(lock, { a: '^1' })!;
+  assert.deepEqual([...g.nodes.keys()], ['node_modules/a']);
+  assert.ok([...g.nodes.values()].every((n) => n.name));
+});
+
 test('fixedFor picks the fix of the range containing the version', () => {
   const affected = [{ package: { name: 'm' }, ranges: [{ type: 'SEMVER', events: [{ introduced: '0' }, { fixed: '1.5.0' }, { introduced: '2.0.0' }, { fixed: '2.3.0' }] }] }];
   assert.equal(fixedFor(affected, 'm', '1.2.0'), '1.5.0');

@@ -243,8 +243,33 @@ function runCore(args) {
 
 function runVscode(args) {
   const task = args[0];
-  if (!['typecheck', 'compile', 'package'].includes(task)) throw new Error('Usage: yarn cli vscode typecheck|compile|package');
-  execSync(`yarn workspace pkg-guard ${task}`, { cwd: root, stdio: 'inherit' });
+  const usage = 'Usage: yarn cli vscode typecheck|compile|package|install [--profile <name>] [--editor <command>]';
+  if (!['typecheck', 'compile', 'package', 'install'].includes(task)) throw new Error(usage);
+  if (task !== 'install') {
+    execSync(`yarn workspace pkg-guard ${task}`, { cwd: root, stdio: 'inherit' });
+    return 0;
+  }
+
+  const option = (flag) => {
+    const at = args.indexOf(flag);
+    if (at < 0) return undefined;
+    if (!args[at + 1]) throw new Error(usage);
+    return args[at + 1];
+  };
+  const canRun = (command) => { try { execSync(`${command} --version`, { stdio: 'ignore' }); return true; } catch { return false; } };
+
+  // Package the current code, then install the resulting .vsix (replacing any installed copy).
+  const profile = option('--profile');
+  const editor = option('--editor') ?? ['code', 'code-insiders'].find(canRun);
+  if (!editor || !canRun(editor)) {
+    throw new Error('No VS Code command found. Add "code" to PATH (Command Palette: "Shell Command: Install \'code\' command in PATH") or pass --editor <command>, e.g. code-insiders.');
+  }
+  execSync('yarn workspace pkg-guard package', { cwd: root, stdio: 'inherit' });
+  const { version } = JSON.parse(fs.readFileSync(path.join(root, 'platforms/vscode/package.json'), 'utf8'));
+  const vsix = path.join(root, 'output/vscode', `pkg-guard-${version}.vsix`);
+  if (!fs.existsSync(vsix)) throw new Error(`Expected ${vsix} after packaging.`);
+  execSync(`${editor} ${profile ? `--profile "${profile}" ` : ''}--install-extension "${vsix}" --force`, { cwd: root, stdio: 'inherit' });
+  console.log('\nInstalled. Run "Developer: Reload Window" in VS Code to load the new build.');
   return 0;
 }
 
@@ -312,7 +337,7 @@ async function interactive() {
       { value: 'version', label: 'Sync or bump versions' },
       { value: 'changelog', label: 'Check changelog format' },
       { value: 'core', label: 'Build or test shared core' },
-      { value: 'vscode', label: 'Check or package VS Code extension' },
+      { value: 'vscode', label: 'Check, package or install VS Code extension' },
       { value: 'release', label: 'Prepare a release' },
     ],
   });
@@ -337,6 +362,7 @@ async function interactive() {
   if (task === 'vscode') {
     const action = await p.select({ message: 'Choose a VS Code task', options: [
       { value: 'typecheck', label: 'Typecheck extension' }, { value: 'package', label: 'Build VSIX package' },
+      { value: 'install', label: 'Build and install in VS Code' },
     ] });
     if (p.isCancel(action)) return p.cancel('Cancelled.');
     return runVscode([action]);

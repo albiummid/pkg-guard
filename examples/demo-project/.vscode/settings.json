@@ -1,0 +1,16 @@
+{
+  // Recording-friendly editor settings so every GIF has the same look.
+  "editor.fontSize": 15,
+  "editor.minimap.enabled": false,
+  "editor.hover.delay": 150,
+  "breadcrumbs.enabled": false,
+  "workbench.startupEditor": "none",
+  "workbench.colorTheme": "Default Dark Modern",
+  "workbench.statusBar.visible": true,
+  "files.autoSave": "off",
+  "pkgGuard.enableVulnerabilities": true,
+  "pkgGuard.checkTransitive": true,
+  "pkgGuard.enableOutdated": true,
+  "pkgGuard.showMajorUpdates": true,
+  "pkgGuard.minSeverity": "low"
+}

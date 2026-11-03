@@ -2,7 +2,7 @@
 
 Vulnerability warnings and update suggestions right inside `package.json`, including transitive dependencies. For WebStorm, IntelliJ IDEA and other JetBrains IDEs (build 242+).
 
-![Inline warnings and Alt+Enter fixes](../../../docs/media/jetbrains-inline.gif)
+![Inline warnings and Alt+Enter fixes](../../docs/media/jetbrains-inline.gif)
 
 ## Features
 
@@ -11,7 +11,7 @@ Vulnerability warnings and update suggestions right inside `package.json`, inclu
 - **Transitive vulnerabilities** from `yarn.lock` (v1) or `package-lock.json`, shown on the direct dependency that pulls them in.
 - **Pkg Guard tool window** (right side): needs-attention list, update to latest or a chosen version, changelog, remove.
 
-  ![Tool window](../../../docs/media/jetbrains-toolwindow.gif)
+  ![Tool window](../../docs/media/jetbrains-toolwindow.gif)
 
 - **Compatibility check** before an update: peer dependencies, `engines.node`, and companion updates.
 - **Settings page** under *Settings | Tools | Pkg Guard*.
@@ -33,4 +33,4 @@ cd platforms/jetbrains
 ./gradlew runIde        # sandbox IDE
 ```
 
-The plugin bundles the shared scanner (`core/`) as a Node sidecar; the Gradle build runs `yarn cli core build:server` from the repository root. See the [repository README](../../../README.md) for the layout and versioning.
+The plugin bundles the shared scanner (`src/`) as a Node sidecar; the Gradle build runs `yarn cli core build:server` from the repository root. See the [repository README](../../README.md) for the layout and versioning.
