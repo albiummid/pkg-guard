@@ -9,8 +9,8 @@ const p = require('@clack/prompts');
 const root = path.resolve(__dirname, '..');
 const versionFile = path.join(root, 'version.yml');
 const changelogFile = path.join(root, 'CHANGELOG.md');
-const sections = ['Added', 'Changed', 'Deprecated', 'Removed', 'Fixed', 'Security'];
-const conventionalTypes = { feat: 'Added', fix: 'Fixed', perf: 'Changed', refactor: 'Changed', revert: 'Changed' };
+const sections = ['New Feature', 'Improvements', 'Fixes'];
+const conventionalTypes = { feat: 'New Feature', fix: 'Fixes', perf: 'Improvements', refactor: 'Improvements', revert: 'Improvements' };
 
 function git(...args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -171,7 +171,7 @@ function changelogProblems(text) {
     if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(section.name) || !/^\d{4}-\d{2}-\d{2}$/.test(section.date ?? '')) problems.push(`bad heading for "${section.name}": use "## [x.y.z] - YYYY-MM-DD"`);
   }
   for (const section of parsed.sections) {
-    for (const heading of section.body.match(/^### .*$/gm) ?? []) if (!sections.includes(heading.slice(4))) problems.push(`[${section.name}] unknown section "${heading}"`);
+    for (const heading of section.body.match(/^### .*$/gm) ?? []) if (!sections.includes(heading.slice(4))) problems.push(`[${section.name}] unknown section "${heading}"; use ${sections.join(', ')}`);
   }
   return problems;
 }
