@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Client of the bundled Node process (core/src/server/server.ts): one JSON request per line on stdin, one JSON reply per line on stdout.
+ * Client of the bundled Node process (src/core/src/server/server.ts): one JSON request per line on stdin, one JSON reply per line on stdout.
  * Calls block, so never call them on the EDT.
  */
 @Service(Service.Level.PROJECT)

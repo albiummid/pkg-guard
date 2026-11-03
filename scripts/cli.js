@@ -63,13 +63,13 @@ function editVersionFiles(args) {
     return `${JSON.stringify(value, null, 2)}\n`;
   };
   const targets = [
-    ['core/package.json', (text) => editJson(text, (value) => { value.version = config.version; })],
-    ['platforms/vscode/package.json', (text) => editJson(text, (value) => {
+    ['src/core/package.json', (text) => editJson(text, (value) => { value.version = config.version; })],
+    ['src/platforms/vscode/package.json', (text) => editJson(text, (value) => {
       value.version = config.version;
       value.engines.vscode = `^${config['vscode.engine']}`;
       value.devDependencies['@types/vscode'] = config['vscode.types'];
     })],
-    ['platforms/jetbrains/gradle.properties', (text) => {
+    ['src/platforms/jetbrains/gradle.properties', (text) => {
       const props = {
         version: config.version,
         'pkgguard.sinceBuild': config['jetbrains.sinceBuild'],
@@ -236,8 +236,8 @@ updates CHANGELOG.md, commits, and tags. --push also pushes master and the tag.`
   }
 
   if (!flags.has('--skip-checks')) {
-    runStep('Core tests', 'yarn test', 'core');
-    runStep('VS Code typecheck', 'yarn typecheck', 'platforms/vscode');
+    runStep('Core tests', 'yarn test', 'src/core');
+    runStep('VS Code typecheck', 'yarn typecheck', 'src/platforms/vscode');
     runStep('Versions in sync', 'node scripts/cli.js version --check');
     runStep('Changelog format', 'node scripts/cli.js changelog --check');
   }

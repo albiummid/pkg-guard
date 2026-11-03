@@ -2,7 +2,7 @@
   "name": "pkg-guard-repo",
   "private": true,
   "license": "MIT",
-  "description": "Repo-level scripts only. The code lives in core/ and platforms/*, each with its own package.json.",
+  "description": "Repo-level CLI; core and platform packages live under src/.",
   "engines": {
     "node": ">=24.0.0 <25.0.0"
   },

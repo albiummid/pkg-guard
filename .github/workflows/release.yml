@@ -35,16 +35,16 @@ jobs:
           node scripts/cli.js changelog notes "${version}" > /dev/null
           echo "version=${version}" >> "$GITHUB_OUTPUT"
       - run: yarn install --frozen-lockfile && yarn test
-        working-directory: core
+        working-directory: src/core
       - run: yarn install --frozen-lockfile && yarn typecheck && yarn package
-        working-directory: platforms/vscode
+        working-directory: src/platforms/vscode
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
       - run: bash ./gradlew buildPlugin --no-daemon
-        working-directory: platforms/jetbrains
+        working-directory: src/platforms/jetbrains
       - uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -121,7 +121,7 @@ jobs:
           node-version: 24
       - run: yarn install --frozen-lockfile
         if: steps.gate.outputs.has_token == 'true'
-        working-directory: core
+        working-directory: src/core
       - uses: actions/setup-java@v4
         if: steps.gate.outputs.has_token == 'true'
         with:
@@ -131,4 +131,4 @@ jobs:
         if: steps.gate.outputs.has_token == 'true'
       - run: bash ./gradlew publishPlugin --no-daemon
         if: steps.gate.outputs.has_token == 'true'
-        working-directory: platforms/jetbrains
+        working-directory: src/platforms/jetbrains

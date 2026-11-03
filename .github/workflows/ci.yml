@@ -36,11 +36,11 @@ jobs:
         with:
           node-version: 24
           cache: yarn
-          cache-dependency-path: core/yarn.lock
+          cache-dependency-path: src/core/yarn.lock
       - run: yarn install --frozen-lockfile
-        working-directory: core
+        working-directory: src/core
       - run: yarn test
-        working-directory: core
+        working-directory: src/core
 
   vscode:
     name: VS Code extension
@@ -51,13 +51,13 @@ jobs:
         with:
           node-version: 24
           cache: yarn
-          cache-dependency-path: platforms/vscode/yarn.lock
+          cache-dependency-path: src/platforms/vscode/yarn.lock
       - run: yarn install --frozen-lockfile
-        working-directory: platforms/vscode
+        working-directory: src/platforms/vscode
       - run: yarn typecheck
-        working-directory: platforms/vscode
+        working-directory: src/platforms/vscode
       - run: yarn package
-        working-directory: platforms/vscode
+        working-directory: src/platforms/vscode
       - uses: actions/upload-artifact@v4
         with:
           name: vscode-vsix
@@ -73,17 +73,17 @@ jobs:
         with:
           node-version: 24
           cache: yarn
-          cache-dependency-path: core/yarn.lock
-      # the Gradle build bundles the sidecar with `yarn build:server` from core/
+          cache-dependency-path: src/core/yarn.lock
+      # the Gradle build bundles the sidecar with `yarn build:server` from src/core/
       - run: yarn install --frozen-lockfile
-        working-directory: core
+        working-directory: src/core
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
       - run: bash ./gradlew buildPlugin --no-daemon
-        working-directory: platforms/jetbrains
+        working-directory: src/platforms/jetbrains
       - uses: actions/upload-artifact@v4
         with:
           name: jetbrains-zip

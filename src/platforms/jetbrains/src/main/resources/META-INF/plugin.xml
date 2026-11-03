@@ -2,7 +2,6 @@
   <id>dev.pkgguard</id>
   <name>Pkg Guard</name>
   <vendor>albiummid</vendor>
-  <icon>/icons/pkgGuard.png</icon>
   <description><![CDATA[
     Inline vulnerability warnings and update suggestions in <code>package.json</code>, including transitive
     dependencies. Checks peer dependencies and Node engines before an update and offers companion updates.

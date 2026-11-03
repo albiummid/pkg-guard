@@ -49,17 +49,17 @@ val copyServer by tasks.registering(Copy::class) {
     from("../../core/dist/server.js")
     into(layout.buildDirectory.dir("generated/pkgguard-resources/pkgguard"))
 }
-val copyPluginIcon by tasks.registering(Copy::class) {
-    from("../../core/assets/images/logo.png")
-    into(layout.buildDirectory.dir("generated/pkgguard-resources/icons"))
-    rename { "pkgGuard.png" }
+val copyPluginLogo by tasks.registering(Copy::class) {
+    from("src/main/resources/icons/pkgGuard.svg")
+    into(layout.buildDirectory.dir("generated/pkgguard-resources/META-INF"))
+    rename { "pluginIcon.svg" }
 }
 sourceSets.main { resources.srcDir(layout.buildDirectory.dir("generated/pkgguard-resources")) }
-tasks.processResources { dependsOn(copyServer, copyPluginIcon) }
+tasks.processResources { dependsOn(copyServer, copyPluginLogo) }
 
 // After the build, copy the plugin zip to <repo root>/output/jetbrains.
 val copyToOutput by tasks.registering(Copy::class) {
     from(tasks.buildPlugin.flatMap { it.archiveFile })
-    into(file("../../output/jetbrains"))
+    into(file("../../../output/jetbrains"))
 }
 tasks.buildPlugin { finalizedBy(copyToOutput) }

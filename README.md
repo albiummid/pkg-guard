@@ -17,8 +17,8 @@ Vulnerability warnings and update suggestions right inside your `package.json`, 
 
 | IDE | Package | Guide |
 |---|---|---|
-| VS Code | `.vsix` | [platforms/vscode](platforms/vscode) |
-| WebStorm / IntelliJ IDEA | plugin `.zip` | [platforms/jetbrains](platforms/jetbrains) |
+| VS Code | `.vsix` | [src/platforms/vscode](src/platforms/vscode) |
+| WebStorm / IntelliJ IDEA | plugin `.zip` | [src/platforms/jetbrains](src/platforms/jetbrains) |
 
 Fixes only edit `package.json`; run your package manager afterwards to refresh the lockfile.
 
@@ -26,25 +26,25 @@ Fixes only edit `package.json`; run your package manager afterwards to refresh t
 
 | Folder | Contents |
 |---|---|
-| [`core/`](core) | Shared TypeScript logic and the JSON-RPC sidecar used by every platform |
-| [`platforms/vscode/`](platforms/vscode) | VS Code extension |
-| [`platforms/jetbrains/`](platforms/jetbrains) | WebStorm / IntelliJ plugin (Kotlin) |
+| [`src/core/`](src/core) | Shared TypeScript logic and the JSON-RPC sidecar used by every platform |
+| [`src/platforms/vscode/`](src/platforms/vscode) | VS Code extension |
+| [`src/platforms/jetbrains/`](src/platforms/jetbrains) | WebStorm / IntelliJ plugin (Kotlin) |
 | [`docs/media/`](docs/media) | Demo GIFs used in the READMEs |
 | `output/` | Build artifacts (git-ignored) |
 
-A new IDE or language gets its own folder under `platforms/` and reuses `core/`.
+A new IDE or language gets its own folder under `src/platforms/` and reuses `src/core/`.
 
 ## Development
 
 ```bash
 # shared logic
-cd core && yarn install && yarn test
+cd src/core && yarn install && yarn test
 
 # VS Code extension -> output/vscode/*.vsix
-cd platforms/vscode && yarn install && yarn package
+cd src/platforms/vscode && yarn install && yarn package
 
 # JetBrains plugin -> output/jetbrains/*.zip
-cd platforms/jetbrains && ./gradlew buildPlugin
+cd src/platforms/jetbrains && ./gradlew buildPlugin
 ```
 
 ### Versions
@@ -58,7 +58,7 @@ yarn cli version                 # re-sync after editing version.yml
 yarn cli version --check         # fail if a file is out of sync
 ```
 
-When adding a platform, add it to the targets list in `scripts/cli.js`. The Kotlin and IntelliJ Gradle plugin versions stay in `platforms/jetbrains/build.gradle.kts` because the `plugins {}` block can't read properties.
+When adding a platform, add it to the targets list in `scripts/cli.js`. The Kotlin and IntelliJ Gradle plugin versions stay in `src/platforms/jetbrains/build.gradle.kts` because the `plugins {}` block can't read properties.
 
 ## Contributing
 
