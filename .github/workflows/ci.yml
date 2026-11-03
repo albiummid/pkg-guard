@@ -36,11 +36,9 @@ jobs:
         with:
           node-version: 24
           cache: yarn
-          cache-dependency-path: src/core/yarn.lock
+          cache-dependency-path: yarn.lock
       - run: yarn install --frozen-lockfile
-        working-directory: src/core
-      - run: yarn test
-        working-directory: src/core
+      - run: yarn cli core test
 
   vscode:
     name: VS Code extension
@@ -51,13 +49,10 @@ jobs:
         with:
           node-version: 24
           cache: yarn
-          cache-dependency-path: src/platforms/vscode/yarn.lock
+          cache-dependency-path: yarn.lock
       - run: yarn install --frozen-lockfile
-        working-directory: src/platforms/vscode
-      - run: yarn typecheck
-        working-directory: src/platforms/vscode
-      - run: yarn package
-        working-directory: src/platforms/vscode
+      - run: yarn cli vscode typecheck
+      - run: yarn cli vscode package
       - uses: actions/upload-artifact@v4
         with:
           name: vscode-vsix
@@ -73,10 +68,9 @@ jobs:
         with:
           node-version: 24
           cache: yarn
-          cache-dependency-path: src/core/yarn.lock
-      # the Gradle build bundles the sidecar with `yarn build:server` from src/core/
+          cache-dependency-path: yarn.lock
+      # The Gradle build bundles the sidecar through the root CLI.
       - run: yarn install --frozen-lockfile
-        working-directory: src/core
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

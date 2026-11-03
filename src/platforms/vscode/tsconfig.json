@@ -8,8 +8,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "types": ["node"],
-    "paths": { "@core/*": ["../../core/src/*"] }
+    "paths": { "@core/*": ["../../../core/src/*"] }
   },
-  "include": ["src", "../../core/src"],
-  "exclude": ["../../core/src/test"]
+  "include": ["src", "../../../core/src"],
+  "exclude": ["../../../core/src/test"]
 }

@@ -26,22 +26,25 @@ Fixes only edit `package.json`; run your package manager afterwards to refresh t
 
 | Folder | Contents |
 |---|---|
-| [`src/core/`](src/core) | Shared TypeScript logic and the JSON-RPC sidecar used by every platform |
+| [`core/`](core) | Shared TypeScript logic and the JSON-RPC sidecar used by every platform |
 | [`src/platforms/vscode/`](src/platforms/vscode) | VS Code extension |
 | [`src/platforms/jetbrains/`](src/platforms/jetbrains) | WebStorm / IntelliJ plugin (Kotlin) |
 | [`docs/media/`](docs/media) | Demo GIFs used in the READMEs |
 | `output/` | Build artifacts (git-ignored) |
 
-A new IDE or language gets its own folder under `src/platforms/` and reuses `src/core/`.
+A new IDE or language gets its own folder under `src/platforms/` and reuses `core/`.
 
 ## Development
 
 ```bash
-# shared logic
-cd src/core && yarn install && yarn test
+# install all root and VS Code workspace tools once
+yarn install
+
+# shared logic + tests
+yarn cli core test
 
 # VS Code extension -> output/vscode/*.vsix
-cd src/platforms/vscode && yarn install && yarn package
+yarn cli vscode package
 
 # JetBrains plugin -> output/jetbrains/*.zip
 cd src/platforms/jetbrains && ./gradlew buildPlugin

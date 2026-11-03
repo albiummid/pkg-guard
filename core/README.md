@@ -2,8 +2,10 @@
 
 Shared TypeScript logic (OSV, registry, lockfile, semver, fix computation) used by every platform.
 
+Install the shared toolchain once from the repository root with `yarn install`.
+
 - `src/server/server.ts` is a Node sidecar speaking line-delimited JSON-RPC over stdin/stdout (`scan`, `fixEffect`, `rangeEdits`, `compat`, `changelog`, `repoUrl`, `clearCache`). A new IDE/language integration only needs to spawn it and speak this protocol.
-- `yarn build:server` -> `dist/server.js`; `yarn test` runs the unit tests.
+- `yarn cli core build:server` -> `core/dist/server.js`; `yarn cli core test` runs the unit tests (both commands run from the repository root).
 
 ## Layout (`src/`)
 

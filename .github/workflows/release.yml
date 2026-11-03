@@ -34,10 +34,9 @@ jobs:
           node scripts/cli.js changelog --check
           node scripts/cli.js changelog notes "${version}" > /dev/null
           echo "version=${version}" >> "$GITHUB_OUTPUT"
-      - run: yarn install --frozen-lockfile && yarn test
-        working-directory: src/core
-      - run: yarn install --frozen-lockfile && yarn typecheck && yarn package
-        working-directory: src/platforms/vscode
+      - run: yarn cli core test
+      - run: yarn cli vscode typecheck
+      - run: yarn cli vscode package
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -119,9 +118,10 @@ jobs:
         if: steps.gate.outputs.has_token == 'true'
         with:
           node-version: 24
+          cache: yarn
+          cache-dependency-path: yarn.lock
       - run: yarn install --frozen-lockfile
         if: steps.gate.outputs.has_token == 'true'
-        working-directory: src/core
       - uses: actions/setup-java@v4
         if: steps.gate.outputs.has_token == 'true'
         with:

@@ -63,11 +63,13 @@ function editVersionFiles(args) {
     return `${JSON.stringify(value, null, 2)}\n`;
   };
   const targets = [
-    ['src/core/package.json', (text) => editJson(text, (value) => { value.version = config.version; })],
+    ['package.json', (text) => editJson(text, (value) => {
+      value.version = config.version;
+      value.devDependencies['@types/vscode'] = config['vscode.types'];
+    })],
     ['src/platforms/vscode/package.json', (text) => editJson(text, (value) => {
       value.version = config.version;
       value.engines.vscode = `^${config['vscode.engine']}`;
-      value.devDependencies['@types/vscode'] = config['vscode.types'];
     })],
     ['src/platforms/jetbrains/gradle.properties', (text) => {
       const props = {
@@ -210,6 +212,42 @@ function runStep(title, command, cwd = '.') {
   catch { throw new Error(`Failed: ${title}. Nothing was changed.`); }
 }
 
+function runCore(args) {
+  const task = args[0];
+  const core = path.join(root, 'core');
+  const tsc = path.resolve(path.dirname(require.resolve('typescript')), '../bin/tsc');
+  const run = (nodeArgs) => execFileSync(process.execPath, nodeArgs, { cwd: root, stdio: 'inherit' });
+
+  if (task === 'compile' || task === 'test' || task === 'watch') {
+    run([tsc, '-p', core, ...(task === 'watch' ? ['--watch'] : [])]);
+    if (task !== 'test') return 0;
+  }
+  if (task === 'test') {
+    const testDir = path.join(core, 'out', 'test');
+    const testFiles = fs.readdirSync(testDir).filter((name) => name.endsWith('.test.js')).map((name) => path.join(testDir, name));
+    run(['--test', ...testFiles]);
+    return 0;
+  }
+  if (task === 'build:server') {
+    require('esbuild').buildSync({
+      entryPoints: [path.join(core, 'src/server/server.ts')],
+      bundle: true,
+      platform: 'node',
+      target: `node${readVersionConfig()['node.target']}`,
+      outfile: path.join(core, 'dist/server.js'),
+    });
+    return 0;
+  }
+  throw new Error('Usage: yarn cli core compile|watch|build:server|test');
+}
+
+function runVscode(args) {
+  const task = args[0];
+  if (!['typecheck', 'compile', 'package'].includes(task)) throw new Error('Usage: yarn cli vscode typecheck|compile|package');
+  execSync(`yarn workspace pkg-guard ${task}`, { cwd: root, stdio: 'inherit' });
+  return 0;
+}
+
 function prepareRelease(args) {
   const flags = new Set(args.filter((arg) => arg.startsWith('--')));
   const bump = args.find((arg) => !arg.startsWith('--'));
@@ -236,8 +274,8 @@ updates CHANGELOG.md, commits, and tags. --push also pushes master and the tag.`
   }
 
   if (!flags.has('--skip-checks')) {
-    runStep('Core tests', 'yarn test', 'src/core');
-    runStep('VS Code typecheck', 'yarn typecheck', 'src/platforms/vscode');
+    runStep('Core tests', 'node scripts/cli.js core test');
+    runStep('VS Code typecheck', 'node scripts/cli.js vscode typecheck');
     runStep('Versions in sync', 'node scripts/cli.js version --check');
     runStep('Changelog format', 'node scripts/cli.js changelog --check');
   }
@@ -273,6 +311,8 @@ async function interactive() {
     options: [
       { value: 'version', label: 'Sync or bump versions' },
       { value: 'changelog', label: 'Check changelog format' },
+      { value: 'core', label: 'Build or test shared core' },
+      { value: 'vscode', label: 'Check or package VS Code extension' },
       { value: 'release', label: 'Prepare a release' },
     ],
   });
@@ -286,6 +326,21 @@ async function interactive() {
     return editVersionFiles(action === 'sync' ? [] : [action]);
   }
   if (task === 'changelog') return manageChangelog(['--check']);
+  if (task === 'core') {
+    const action = await p.select({ message: 'Choose a core task', options: [
+      { value: 'test', label: 'Run core tests' }, { value: 'build:server', label: 'Build Node sidecar' },
+      { value: 'compile', label: 'Compile TypeScript' }, { value: 'watch', label: 'Watch TypeScript' },
+    ] });
+    if (p.isCancel(action)) return p.cancel('Cancelled.');
+    return runCore([action]);
+  }
+  if (task === 'vscode') {
+    const action = await p.select({ message: 'Choose a VS Code task', options: [
+      { value: 'typecheck', label: 'Typecheck extension' }, { value: 'package', label: 'Build VSIX package' },
+    ] });
+    if (p.isCancel(action)) return p.cancel('Cancelled.');
+    return runVscode([action]);
+  }
   const bump = await p.select({ message: 'Choose a release version bump', options: [
     { value: 'patch', label: 'Patch' }, { value: 'minor', label: 'Minor' }, { value: 'major', label: 'Major' },
   ] });
@@ -299,11 +354,13 @@ async function main() {
   const [command, ...args] = process.argv.slice(2);
   if (!command) { process.exitCode = await interactive(); return; }
   if (command === '--help' || command === '-h') {
-    console.log('Usage: yarn cli [version|changelog|release] [arguments]\nRun without arguments to choose a task interactively.');
+    console.log('Usage: yarn cli [version|changelog|core|vscode|release] [arguments]\nRun without arguments to choose a task interactively.');
     return;
   }
   const status = command === 'version' ? editVersionFiles(args)
     : command === 'changelog' ? manageChangelog(args)
+      : command === 'core' ? runCore(args)
+        : command === 'vscode' ? runVscode(args)
       : command === 'release' ? prepareRelease(args) : undefined;
   if (status === undefined) throw new Error(`Unknown task: ${command}`);
   process.exitCode = status;

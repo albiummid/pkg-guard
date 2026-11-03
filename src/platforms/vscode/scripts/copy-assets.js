@@ -2,6 +2,6 @@
 const fs = require("fs");
 const path = require("path");
 
-const source = path.resolve(__dirname, "../../../core/assets/images/logo.png");
+const source = path.resolve(__dirname, "../../../../core/assets/images/logo.png");
 const destination = path.resolve(__dirname, "../media/logo.png");
 fs.copyFileSync(source, destination);

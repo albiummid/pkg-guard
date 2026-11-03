@@ -36,17 +36,19 @@ intellijPlatform {
     publishing { token = providers.environmentVariable("PUBLISH_TOKEN") }
 }
 
-// The Node sidecar: one bundled JS file built from ../../core/src by `yarn build:server`, shipped inside the plugin jar.
+// The Node sidecar is built by the root CLI and shipped inside the plugin jar.
 val isWindows = System.getProperty("os.name").lowercase().contains("win")
+val repoRoot = file("../../..")
+val coreDir = file("../../../core")
 val buildServer by tasks.registering(Exec::class) {
-    workingDir = file("../../core")
-    commandLine(if (isWindows) listOf("cmd", "/c", "yarn", "build:server") else listOf("yarn", "build:server"))
-    inputs.dir("../../core/src")
-    outputs.file("../../core/dist/server.js")
+    workingDir = repoRoot
+    commandLine(if (isWindows) listOf("cmd", "/c", "node", "scripts/cli.js", "core", "build:server") else listOf("node", "scripts/cli.js", "core", "build:server"))
+    inputs.dir(coreDir.resolve("src"))
+    outputs.file(coreDir.resolve("dist/server.js"))
 }
 val copyServer by tasks.registering(Copy::class) {
     dependsOn(buildServer)
-    from("../../core/dist/server.js")
+    from(coreDir.resolve("dist/server.js"))
     into(layout.buildDirectory.dir("generated/pkgguard-resources/pkgguard"))
 }
 val copyPluginLogo by tasks.registering(Copy::class) {

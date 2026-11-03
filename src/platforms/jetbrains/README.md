@@ -27,9 +27,10 @@ Download the plugin `.zip`, then *Settings | Plugins | ⚙ | Install Plugin from
 ## Build from source
 
 ```bash
+# From the repository root, install the shared toolchain once with `yarn install`.
 cd src/platforms/jetbrains
 ./gradlew buildPlugin   # zip lands in output/jetbrains/
 ./gradlew runIde        # sandbox IDE
 ```
 
-The plugin bundles the shared scanner (`src/core/`) as a Node sidecar; the Gradle build runs `yarn build:server` in `src/core/` for you. See the [repository README](../../../README.md) for the layout and versioning.
+The plugin bundles the shared scanner (`core/`) as a Node sidecar; the Gradle build runs `yarn cli core build:server` from the repository root. See the [repository README](../../../README.md) for the layout and versioning.

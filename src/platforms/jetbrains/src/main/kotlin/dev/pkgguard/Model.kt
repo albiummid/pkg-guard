@@ -1,6 +1,6 @@
 package dev.pkgguard
 
-// JSON shapes of the Node sidecar (src/core/src/server/server.ts). Optional fields are nullable because Gson leaves missing ones null.
+// JSON shapes of the Node sidecar (core/src/server/server.ts). Optional fields are nullable because Gson leaves missing ones null.
 
 data class Entry(
     val name: String,

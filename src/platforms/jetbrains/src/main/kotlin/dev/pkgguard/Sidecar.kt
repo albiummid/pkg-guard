@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Client of the bundled Node process (src/core/src/server/server.ts): one JSON request per line on stdin, one JSON reply per line on stdout.
+ * Client of the bundled Node process (core/src/server/server.ts): one JSON request per line on stdin, one JSON reply per line on stdout.
  * Calls block, so never call them on the EDT.
  */
 @Service(Service.Level.PROJECT)
@@ -61,7 +61,7 @@ class Sidecar(private val project: Project) : Disposable {
         Files.createDirectories(dir)
         val target = dir.resolve("server.js")
         val res = Sidecar::class.java.getResourceAsStream("/pkgguard/server.js")
-            ?: error("server.js is missing from the plugin. Run `yarn build:server` and rebuild the plugin.")
+            ?: error("server.js is missing from the plugin. Run `yarn cli core build:server` and rebuild the plugin.")
         res.use { Files.copy(it, target, StandardCopyOption.REPLACE_EXISTING) }
         return target
     }

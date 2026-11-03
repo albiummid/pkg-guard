@@ -22,11 +22,11 @@ Incorrect or missing advisories come from [OSV.dev](https://osv.dev), so report 
 
 | Folder | Contents |
 |---|---|
-| `src/core/` | Shared TypeScript logic and the JSON-RPC sidecar. Most features and fixes belong here so every IDE gets them. |
-| `src/platforms/vscode/` | VS Code extension (UI only; calls into `src/core/`). |
+| `core/` | Shared TypeScript logic and the JSON-RPC sidecar. Most features and fixes belong here so every IDE gets them. |
+| `src/platforms/vscode/` | VS Code extension (UI only; calls into `core/`). |
 | `src/platforms/jetbrains/` | JetBrains plugin in Kotlin (UI only; talks to the sidecar). |
 
-Inside `src/core/src/`, code is grouped by feature: `utils/`, `manifest/`, `vulnerabilities/`, `updates/`, `changelog/`, `scan/`, `fixes/`, `server/`. Put new code in the matching folder, or add a new feature folder. See [`src/core/README.md`](src/core/README.md).
+Inside `core/src/`, code is grouped by feature: `utils/`, `manifest/`, `vulnerabilities/`, `updates/`, `changelog/`, `scan/`, `fixes/`, `server/`. Put new code in the matching folder, or add a new feature folder. See [`core/README.md`](core/README.md).
 
 If you add or change a sidecar method, update the Kotlin types in `src/platforms/jetbrains/src/main/kotlin/dev/pkgguard/Model.kt` by hand. They mirror the TypeScript shapes and are not generated yet.
 
@@ -35,15 +35,16 @@ If you add or change a sidecar method, update the Kotlin types in `src/platforms
 Requirements: Node.js 24, yarn 1.x, and JDK 17 (JetBrains plugin only).
 
 ```bash
-cd src/core && yarn install && yarn test            # shared logic + tests
-cd src/platforms/vscode && yarn install             # then F5 in VS Code on this folder
+yarn install                                         # root CLI and VS Code workspace tools
+yarn cli core test                                   # shared logic + tests
+yarn cli vscode typecheck                           # VS Code extension
 cd src/platforms/jetbrains && ./gradlew runIde      # sandbox IDE
 ```
 
 Build artifacts land in `output/` (git-ignored):
 
 ```bash
-cd src/platforms/vscode && yarn package             # -> output/vscode/*.vsix
+yarn cli vscode package                             # -> output/vscode/*.vsix
 cd src/platforms/jetbrains && ./gradlew buildPlugin # -> output/jetbrains/*.zip
 ```
 
@@ -52,9 +53,9 @@ cd src/platforms/jetbrains && ./gradlew buildPlugin # -> output/jetbrains/*.zip
 1. Open or comment on an issue first for anything larger than a small fix, so we agree on the approach.
 2. Branch from `master`: `feat/<short-name>` or `fix/<short-name>`.
 3. Keep the change focused. Match the surrounding style and comment density.
-4. Add or update tests in `src/core/src/test/` for logic changes. Run `cd src/core && yarn test`.
-5. Run `yarn typecheck` in `src/platforms/vscode/` if you touched TypeScript used by the extension.
-6. If you touched the sidecar or `src/core/`, build the JetBrains plugin once to confirm it still bundles.
+4. Add or update tests in `core/src/test/` for logic changes. Run `yarn cli core test`.
+5. Run `yarn cli vscode typecheck` if you touched TypeScript used by the extension.
+6. If you touched the sidecar or `core/`, build the JetBrains plugin once to confirm it still bundles.
 7. Update the READMEs when behaviour or settings change. New settings go in `src/platforms/vscode/package.json`, the JetBrains settings page, and the settings table in `src/platforms/vscode/README.md`.
 
 ### Versions
@@ -86,7 +87,7 @@ First it requires a clean `master` that is up to date with `origin` and runs the
 
 ## Adding a new platform
 
-Create `src/platforms/<name>/`, run the sidecar from `src/core/dist/server.js` (see [`src/core/README.md`](src/core/README.md) for the protocol), copy its final artifact to `output/<name>/`, and add it to the targets list in `scripts/cli.js`.
+Create `src/platforms/<name>/`, run the sidecar from `core/dist/server.js` (see [`core/README.md`](core/README.md) for the protocol), copy its final artifact to `output/<name>/`, and add it to the targets list in `scripts/cli.js`.
 
 ## License
 
