@@ -38,7 +38,7 @@ intellijPlatform {
 
 // The Node sidecar is built by the root CLI and shipped inside the plugin jar.
 val isWindows = System.getProperty("os.name").lowercase().contains("win")
-val repoRoot = file("../../..")
+val repoRoot = file("../..")
 val coreDir = repoRoot
 val buildServer by tasks.registering(Exec::class) {
     workingDir = repoRoot
@@ -52,9 +52,8 @@ val copyServer by tasks.registering(Copy::class) {
     into(layout.buildDirectory.dir("generated/pkgguard-resources/pkgguard"))
 }
 val copyPluginLogo by tasks.registering(Copy::class) {
-    from("src/main/resources/icons/pkgGuard.svg")
+    from("src/main/resources/icons/pluginIcon.svg")
     into(layout.buildDirectory.dir("generated/pkgguard-resources/META-INF"))
-    rename { "pluginIcon.svg" }
 }
 sourceSets.main { resources.srcDir(layout.buildDirectory.dir("generated/pkgguard-resources")) }
 tasks.processResources { dependsOn(copyServer, copyPluginLogo) }
@@ -62,6 +61,6 @@ tasks.processResources { dependsOn(copyServer, copyPluginLogo) }
 // After the build, copy the plugin zip to <repo root>/output/jetbrains.
 val copyToOutput by tasks.registering(Copy::class) {
     from(tasks.buildPlugin.flatMap { it.archiveFile })
-    into(file("../../../output/jetbrains"))
+    into(file("../../output/jetbrains"))
 }
 tasks.buildPlugin { finalizedBy(copyToOutput) }
