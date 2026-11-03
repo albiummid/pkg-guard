@@ -45,6 +45,7 @@ Dependents are checked among your direct dependencies, using their installed `no
 |---|---|---|
 | `pkgGuard.enableVulnerabilities` | `true` | |
 | `pkgGuard.checkTransitive` | `true` | needs a supported lockfile |
+| `pkgGuard.refreshIntervalHours` | `6` | re-scan with fresh advisories this often; `0` turns it off |
 | `pkgGuard.importWarnings` | `true` | warnings on imports in JS / TS files |
 | `pkgGuard.enableOutdated` | `true` | |
 | `pkgGuard.showMajorUpdates` | `true` | |

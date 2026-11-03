@@ -10,9 +10,11 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.PsiManager
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.util.Alarm
@@ -34,6 +36,7 @@ fun notify(project: Project, message: String, type: NotificationType = Notificat
 class PkgGuardService(private val project: Project) : Disposable {
     private val log = logger<PkgGuardService>()
     private val alarm = Alarm(Alarm.ThreadToUse.POOLED_THREAD, this)
+    private val periodic = Alarm(Alarm.ThreadToUse.POOLED_THREAD, this)
     private var warnedAboutNode = false
 
     val states = ConcurrentHashMap<String, ScanResponse>()
@@ -97,6 +100,26 @@ class PkgGuardService(private val project: Project) : Disposable {
     fun scheduleRefresh() {
         alarm.cancelAllRequests()
         alarm.addRequest({ refreshAll(clearCaches = false) }, 500)
+    }
+
+    /** New advisories are published all the time; without this an IDE left open never sees them. Re-arms itself. */
+    fun schedulePeriodicRefresh() {
+        periodic.cancelAllRequests()
+        val hours = settings.state.refreshIntervalHours.coerceAtMost(168)
+        if (hours > 0) periodic.addRequest({
+            refreshAll(clearCaches = true)
+            schedulePeriodicRefresh()
+        }, hours * 3_600_000L)
+    }
+
+    /** Re-runs the import warnings of the open JS / TS files, after a package.json's findings changed. */
+    fun refreshImportWarnings() {
+        ApplicationManager.getApplication().invokeLater({
+            val psi = PsiManager.getInstance(project)
+            for (f in FileEditorManager.getInstance(project).openFiles) {
+                if (isSourceFile(f)) psi.findFile(f)?.let { DaemonCodeAnalyzer.getInstance(project).restart(it) }
+            }
+        }, project.disposed)
     }
 
     override fun dispose() {}

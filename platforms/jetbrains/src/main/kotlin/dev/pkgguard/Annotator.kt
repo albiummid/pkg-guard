@@ -29,7 +29,14 @@ class PackageJsonAnnotator : ExternalAnnotator<PackageJsonAnnotator.Input, ScanR
         return if (isPackageJson(vf)) Input(vf, file.text, file.project) else null
     }
 
-    override fun doAnnotate(input: Input?): ScanResponse? = input?.project?.service<PkgGuardService>()?.scanText(input.file, input.text)
+    override fun doAnnotate(input: Input?): ScanResponse? {
+        input ?: return null
+        val service = input.project.service<PkgGuardService>()
+        val before = service.states[input.file.path]?.findings
+        val result = service.scanText(input.file, input.text)
+        if (result != null && result.findings != before) service.refreshImportWarnings()
+        return result
+    }
 
     override fun apply(file: PsiFile, result: ScanResponse?, holder: AnnotationHolder) {
         result ?: return

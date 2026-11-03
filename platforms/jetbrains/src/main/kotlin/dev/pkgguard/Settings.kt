@@ -10,6 +10,7 @@ import com.intellij.openapi.options.BoundConfigurable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.dsl.builder.COLUMNS_LARGE
+import com.intellij.ui.dsl.builder.bindIntText
 import com.intellij.ui.dsl.builder.bindItem
 import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.bindText
@@ -26,6 +27,7 @@ class PkgGuardSettings : PersistentStateComponent<PkgGuardSettings.State> {
         var checkTransitive: Boolean = true
         var enableOutdated: Boolean = true
         var importWarnings: Boolean = true
+        var refreshIntervalHours: Int = 6
         var showMajorUpdates: Boolean = true
         var minSeverity: String = "low"
         var auditFallback: Boolean = true
@@ -74,6 +76,9 @@ class PkgGuardConfigurable(private val project: Project) : BoundConfigurable("Pk
                 row { checkBox("Suggest newer versions from the registry").bindSelected(s::enableOutdated) }
                 row { checkBox("Also suggest updates that cross a major version").bindSelected(s::showMajorUpdates) }
                 row { checkBox("Fall back to yarn / npm audit when OSV.dev is unreachable (trusted projects only)").bindSelected(s::auditFallback) }
+                row("Re-scan every (hours):") {
+                    intTextField(0..168).bindIntText(s::refreshIntervalHours).comment("Fetches fresh advisories and versions so new vulnerabilities show up in a long-running IDE. 0 turns it off.")
+                }
                 row("Hide vulnerabilities below:") {
                     comboBox(listOf("low", "moderate", "high", "critical")).bindItem({ s.minSeverity }, { s.minSeverity = it ?: "low" })
                 }
@@ -95,5 +100,6 @@ class PkgGuardConfigurable(private val project: Project) : BoundConfigurable("Pk
         super.apply()
         project.service<Sidecar>().restart() // the node path may have changed
         project.service<PkgGuardService>().refreshAll(clearCaches = false)
+        project.service<PkgGuardService>().schedulePeriodicRefresh()
     }
 }

@@ -16,6 +16,7 @@
     <!-- every language: JS / TS files are plain text without the JavaScript plugin; ImportAnnotator filters by extension -->
     <externalAnnotator language="" implementationClass="dev.pkgguard.ImportAnnotator"/>
     <editor.linePainter implementation="dev.pkgguard.PkgGuardLinePainter"/>
+    <postStartupActivity implementation="dev.pkgguard.PkgGuardStartup"/>
     <toolWindow id="Pkg Guard" anchor="right" icon="/icons/pkgGuard.svg" factoryClass="dev.pkgguard.PkgGuardToolWindowFactory"/>
     <projectConfigurable parentId="tools" id="dev.pkgguard.settings" instance="dev.pkgguard.PkgGuardConfigurable" displayName="Pkg Guard"/>
     <notificationGroup id="Pkg Guard" displayType="BALLOON"/>

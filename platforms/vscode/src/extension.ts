@@ -186,6 +186,16 @@ export function activate(ctx: vscode.ExtensionContext): void {
     tree.refresh();
   };
   registerCommands(ctx, () => refreshAll(true));
+
+  // new advisories are published all the time; without this a window left open never sees them
+  let periodic: NodeJS.Timeout | undefined;
+  const schedulePeriodic = () => {
+    clearInterval(periodic);
+    const hours = Math.min(vscode.workspace.getConfiguration('pkgGuard').get('refreshIntervalHours', 6), 168);
+    periodic = hours > 0 ? setInterval(() => refreshAll(true), hours * 3_600_000) : undefined;
+  };
+  schedulePeriodic();
+  ctx.subscriptions.push({ dispose: () => clearInterval(periodic) });
   registerImportWarnings(ctx);
 
   ctx.subscriptions.push(
@@ -208,7 +218,10 @@ export function activate(ctx: vscode.ExtensionContext): void {
     vscode.workspace.onDidSaveTextDocument((d) => schedule(d, 0)),
     // keep the state: the sidebar still shows this project
     vscode.workspace.onDidCloseTextDocument((d) => diagnostics.delete(d.uri)),
-    vscode.workspace.onDidChangeConfiguration((e) => e.affectsConfiguration('pkgGuard') && refreshAll(false)),
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('pkgGuard.refreshIntervalHours')) schedulePeriodic();
+      if (e.affectsConfiguration('pkgGuard')) refreshAll(false);
+    }),
     vscode.window.onDidChangeActiveTextEditor((ed) => {
       updateStatus(ed);
       if (ed && isPackageJson(ed.document)) {

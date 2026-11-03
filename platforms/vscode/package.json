@@ -499,6 +499,13 @@
           "default": true,
           "description": "Also report vulnerabilities in transitive dependencies (needs a yarn.lock v1 or package-lock.json). They are shown on the direct dependency that pulls them in."
         },
+        "pkgGuard.refreshIntervalHours": {
+          "type": "number",
+          "default": 6,
+          "minimum": 0,
+          "maximum": 168,
+          "description": "Re-scan every project this often (hours), fetching fresh advisories and versions, so new vulnerabilities show up in a long-running window. 0 turns it off."
+        },
         "pkgGuard.importWarnings": {
           "type": "boolean",
           "default": true,

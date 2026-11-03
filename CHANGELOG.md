@@ -6,6 +6,11 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 
 ## [Unreleased]
 
+### Improvements
+
+- Re-scan every project periodically (every 6 hours by default) with fresh advisory data, so new vulnerabilities show up in an editor left open. Set `pkgGuard.refreshIntervalHours` (or the JetBrains setting) to change it, or 0 to turn it off.
+- JetBrains: editing package.json now refreshes the import warnings of open JS / TS files.
+
 ### New Feature
 
 - Import warnings: vulnerable dependencies are flagged on their `import` / `require` lines in JS and TS files (end-of-line text, hover and Problems in VS Code; inspections in JetBrains). Toggle with `pkgGuard.importWarnings` or the JetBrains settings page.
