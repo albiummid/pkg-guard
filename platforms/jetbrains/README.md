@@ -2,7 +2,7 @@
 
 Vulnerability warnings and update suggestions right inside `package.json`, including transitive dependencies. For WebStorm, IntelliJ IDEA and other JetBrains IDEs (build 242+).
 
-![Inline warnings and Alt+Enter fixes](../../docs/media/jetbrains-inline.gif)
+![Pkg Guard in a package.json with the tool window](../../docs/media/jetbrains-package-json-with-sidebar.png)
 
 ## Features
 

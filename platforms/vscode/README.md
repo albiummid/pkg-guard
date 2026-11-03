@@ -2,7 +2,7 @@
 
 Vulnerability warnings and update suggestions right inside `package.json`, including transitive dependencies, with one-click fixes.
 
-![Inline warnings and quick fixes](https://raw.githubusercontent.com/albiummid/pkg-guard/master/docs/media/vscode-inline.gif)
+![Pkg Guard in a package.json with the sidebar](https://raw.githubusercontent.com/albiummid/pkg-guard/master/docs/media/vscode-package-json-with-sidebar.png)
 
 ## Features
 

@@ -4,6 +4,8 @@ Referenced by the READMEs. Record at ~800px wide, under 5 MB each, and use these
 
 | File | Shows |
 |---|---|
+| `vscode-package-json-with-sidebar.png` | Hero screenshot for the VS Code Marketplace listing and the root README |
+| `jetbrains-package-json-with-sidebar.png` | Hero screenshot for the JetBrains listing |
 | `vscode-inline.gif` | Opening a `package.json`: inline warnings, hover, quick fix to the fixed version |
 | `vscode-sidebar.gif` | Activity bar → Pkg Guard: needs-attention list, update to latest, changelog, compatibility check |
 | `jetbrains-inline.gif` | Opening a `package.json`: inline warnings, Alt+Enter fix |

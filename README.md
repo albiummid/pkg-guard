@@ -2,7 +2,7 @@
 
 Vulnerability warnings and update suggestions right inside your `package.json`, including **transitive** dependencies, with safe one-click fixes. Available for VS Code and the JetBrains IDEs (WebStorm, IntelliJ IDEA, …).
 
-![Pkg Guard in VS Code](docs/media/vscode-inline.gif)
+![Pkg Guard in VS Code](docs/media/vscode-package-json-with-sidebar.png)
 
 ## Features
 
