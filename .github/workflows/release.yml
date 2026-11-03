@@ -1,9 +1,20 @@
 name: Release
 
 # Start with: node scripts/cli.js release patch|minor|major --push   (bumps version.yml, commits, tags vX.Y.Z, pushes)
+# Re-publish an existing tag to one or both extension registries from the Actions tab (Run workflow).
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build and publish (e.g. v0.1.3)
+        required: true
+      target:
+        description: Where to publish the VS Code extension
+        type: choice
+        options: [both, marketplace, openvsx]
+        default: both
 
 permissions:
   contents: write
@@ -12,10 +23,15 @@ jobs:
   build:
     name: Build and test
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
     outputs:
       version: ${{ steps.version.outputs.version }}
+      tag: ${{ env.TAG }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -26,8 +42,8 @@ jobs:
         id: version
         run: |
           version="$(node scripts/cli.js version --print)"
-          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
-            echo "Tag ${GITHUB_REF_NAME} does not match version.yml (${version})." >&2
+          if [ "${TAG}" != "v${version}" ]; then
+            echo "Tag ${TAG} does not match version.yml (${version})." >&2
             exit 1
           fi
           node scripts/cli.js version --check
@@ -55,6 +71,7 @@ jobs:
   github-release:
     name: GitHub release
     needs: build
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,34 +95,70 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" $flags --notes-file release-notes.md --title "Pkg Guard ${GITHUB_REF_NAME}" $(find dist -type f \( -name '*.vsix' -o -name '*.zip' \))
 
   # The publish jobs only run when their token secret exists, and never for prereleases.
-  publish-vscode:
-    name: Publish VS Code extension
+  # Marketplace and Open VSX are separate jobs so one failing does not block the other.
+  # Open VSX also serves Cursor, VSCodium, Windsurf and other VS Code forks.
+  publish-marketplace:
+    name: Publish to VS Code Marketplace
     needs: [build, github-release]
-    if: ${{ !contains(github.ref_name, '-') }}
+    if: ${{ !cancelled() && needs.build.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.github-release.result) && !contains(needs.build.outputs.tag, '-') && (github.event_name == 'push' || contains(fromJSON('["both","marketplace"]'), inputs.target)) }}
     runs-on: ubuntu-latest
     env:
       VSCE_PAT: ${{ secrets.VSCE_PAT }}
-      OVSX_PAT: ${{ secrets.OVSX_PAT }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: yarn
+          cache-dependency-path: yarn.lock
+      - run: yarn install --frozen-lockfile
       - uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist
-      - name: VS Code Marketplace
-        if: ${{ env.VSCE_PAT != '' }}
-        run: npx --yes @vscode/vsce publish --packagePath dist/vscode/*.vsix --pat "$VSCE_PAT"
-      - name: Open VSX
-        if: ${{ env.OVSX_PAT != '' }}
-        run: npx --yes ovsx publish dist/vscode/*.vsix --pat "$OVSX_PAT"
+      - name: Publish
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::warning::VSCE_PAT is not set; skipping the VS Code Marketplace publish."
+            exit 0
+          fi
+          yarn vsce publish --packagePath "$(ls dist/vscode/*.vsix)" --pat "$VSCE_PAT"
+
+  publish-openvsx:
+    name: Publish to Open VSX
+    needs: [build, github-release]
+    if: ${{ !cancelled() && needs.build.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.github-release.result) && !contains(needs.build.outputs.tag, '-') && (github.event_name == 'push' || contains(fromJSON('["both","openvsx"]'), inputs.target)) }}
+    runs-on: ubuntu-latest
+    env:
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+          cache-dependency-path: yarn.lock
+      - run: yarn install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Publish
+        run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo "::warning::OVSX_PAT is not set; skipping the Open VSX publish."
+            exit 0
+          fi
+          yarn ovsx publish "$(ls dist/vscode/*.vsix)" --pat "$OVSX_PAT"
 
   publish-jetbrains:
     name: Publish JetBrains plugin
     needs: [build, github-release]
-    if: ${{ !contains(github.ref_name, '-') }}
+    if: ${{ github.event_name == 'push' && !contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
     env:
       PUBLISH_TOKEN: ${{ secrets.JETBRAINS_PUBLISH_TOKEN }}
