@@ -7,6 +7,8 @@ Vulnerability warnings and update suggestions right inside `package.json`, inclu
 ## Features
 
 - **Inspections** on each dependency: known vulnerabilities and newer patch / minor / major versions.
+- **End-of-line hints** like `⚠ 3 vulns → 4.18.1` on dependency lines, colored by severity.
+- **Import warnings** in JS / TS files: vulnerable packages are flagged on their `import` / `require` lines, with an end-of-line hint.
 - **Alt+Enter fixes**: update to the fixed version, pin a transitive package via `resolutions` / `overrides`, ignore an advisory.
 - **Transitive vulnerabilities** from `yarn.lock` (v1) or `package-lock.json`, shown on the direct dependency that pulls them in.
 - **Pkg Guard tool window** (right side): needs-attention list, update to latest or a chosen version, changelog, remove.

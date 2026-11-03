@@ -34,6 +34,18 @@ data class Finding(
     val fixes: List<Fix> = emptyList(),
 )
 
+/** A bare package specifier in a JS/TS import / require; columns of the quoted string on its line. */
+data class ImportRef(val name: String, val line: Int, val start: Int, val end: Int)
+
+data class ImportFinding(
+    val ref: ImportRef,
+    val level: String, // error | warning | info
+    val message: String,
+    val inline: String,
+    val code: String? = null,
+    val url: String? = null,
+)
+
 data class Pm(val name: String, val installCmd: String, val overrideSection: String, val root: String? = null)
 
 data class VersionInfo(val latest: String? = null, val versions: List<String> = emptyList(), val deprecated: Map<String, String> = emptyMap())

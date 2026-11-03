@@ -9,6 +9,7 @@ import { clearRegistryCache } from '@core/sources/registry';
 import { scan } from '@core/analysis/scan';
 import { findProjects, onDidChange, output, scanUri, settings, states } from './services/store';
 import { PackagesTree } from './views/tree';
+import { registerImportWarnings } from './views/imports';
 
 const inflight = new Map<string, number>();
 const timers = new Map<string, NodeJS.Timeout>();
@@ -185,6 +186,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
     tree.refresh();
   };
   registerCommands(ctx, () => refreshAll(true));
+  registerImportWarnings(ctx);
 
   ctx.subscriptions.push(
     vscode.commands.registerCommand('pkgGuard.refresh', () => refreshAll(true)),

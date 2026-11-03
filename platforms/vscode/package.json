@@ -499,6 +499,11 @@
           "default": true,
           "description": "Also report vulnerabilities in transitive dependencies (needs a yarn.lock v1 or package-lock.json). They are shown on the direct dependency that pulls them in."
         },
+        "pkgGuard.importWarnings": {
+          "type": "boolean",
+          "default": true,
+          "description": "Also show vulnerability warnings on import / require statements of vulnerable dependencies in JS and TS files."
+        },
         "pkgGuard.enableOutdated": {
           "type": "boolean",
           "default": true,

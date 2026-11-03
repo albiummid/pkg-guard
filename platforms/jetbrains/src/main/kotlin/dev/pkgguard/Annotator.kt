@@ -14,6 +14,12 @@ import com.intellij.psi.PsiFile
 
 fun isPackageJson(file: VirtualFile): Boolean = file.name == "package.json" && !file.path.contains("/node_modules/")
 
+fun severityOf(level: String): HighlightSeverity = when (level) {
+    "error" -> HighlightSeverity.ERROR
+    "warning" -> HighlightSeverity.WARNING
+    else -> HighlightSeverity.WEAK_WARNING
+}
+
 /** Vulnerability / update / deprecation findings on the dependency lines of package.json. */
 class PackageJsonAnnotator : ExternalAnnotator<PackageJsonAnnotator.Input, ScanResponse>() {
     class Input(val file: VirtualFile, val text: String, val project: Project)
@@ -33,12 +39,7 @@ class PackageJsonAnnotator : ExternalAnnotator<PackageJsonAnnotator.Input, ScanR
             val lineStart = doc.getLineStartOffset(f.entry.line)
             val end = lineStart + f.entry.end
             if (end > doc.textLength) continue
-            val severity = when (f.level) {
-                "error" -> HighlightSeverity.ERROR
-                "warning" -> HighlightSeverity.WARNING
-                else -> HighlightSeverity.WEAK_WARNING
-            }
-            val b = holder.newAnnotation(severity, f.message).range(TextRange(lineStart + f.entry.nameStart, end))
+            val b = holder.newAnnotation(severityOf(f.level), f.message).range(TextRange(lineStart + f.entry.nameStart, end))
             if (f.kind == "outdated") b.textAttributes(com.intellij.openapi.editor.DefaultLanguageHighlighterColors.LINE_COMMENT)
             f.fixes.forEach { b.withFix(ApplyFixIntention(f, it)) }
             b.create()

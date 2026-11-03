@@ -38,6 +38,10 @@ _Avoid_: Indirect vulnerability, nested vulnerability
 A warning shown on one dependency line in `package.json`, with the Fixes and Suppressions available for it. Its kind is one of: vulnerability, Transitive vulnerability, available Update, or deprecation. One Finding groups every Vulnerability of its kind on that line.
 _Avoid_: Issue, diagnostic, alert
 
+**Import warning**:
+The vulnerability and Transitive vulnerability Findings of a dependency, repeated on an `import` / `require` of that package in a JS or TS source file. Uses the nearest `package.json` above the file that declares the package.
+_Avoid_: Import finding, import diagnostic
+
 **Severity**:
 How serious a Vulnerability is: critical, high, moderate, low or unknown. Comes from the Advisory.
 _Avoid_: Risk, priority

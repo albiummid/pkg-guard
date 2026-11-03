@@ -25,6 +25,7 @@ class PkgGuardSettings : PersistentStateComponent<PkgGuardSettings.State> {
         var enableVulnerabilities: Boolean = true
         var checkTransitive: Boolean = true
         var enableOutdated: Boolean = true
+        var importWarnings: Boolean = true
         var showMajorUpdates: Boolean = true
         var minSeverity: String = "low"
         var auditFallback: Boolean = true
@@ -69,6 +70,7 @@ class PkgGuardConfigurable(private val project: Project) : BoundConfigurable("Pk
             group("Checks") {
                 row { checkBox("Report known vulnerabilities (OSV.dev)").bindSelected(s::enableVulnerabilities) }
                 row { checkBox("Include transitive dependencies (yarn.lock v1 / package-lock.json)").bindSelected(s::checkTransitive) }
+                row { checkBox("Show vulnerability warnings on imports in JS / TS files").bindSelected(s::importWarnings) }
                 row { checkBox("Suggest newer versions from the registry").bindSelected(s::enableOutdated) }
                 row { checkBox("Also suggest updates that cross a major version").bindSelected(s::showMajorUpdates) }
                 row { checkBox("Fall back to yarn / npm audit when OSV.dev is unreachable (trusted projects only)").bindSelected(s::auditFallback) }

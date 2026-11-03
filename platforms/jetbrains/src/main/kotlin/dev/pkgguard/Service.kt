@@ -37,6 +37,8 @@ class PkgGuardService(private val project: Project) : Disposable {
     private var warnedAboutNode = false
 
     val states = ConcurrentHashMap<String, ScanResponse>()
+    /** Import warnings per JS/TS file path, for the end-of-line text. */
+    val importStates = ConcurrentHashMap<String, List<ImportFinding>>()
     val sidecar: Sidecar get() = project.service()
     val settings: PkgGuardSettings get() = project.service()
 
@@ -60,6 +62,18 @@ class PkgGuardService(private val project: Project) : Disposable {
     }
 
     fun scan(file: VirtualFile): ScanResponse? = scanText(file, textOf(file))
+
+    /** Scan results of the package.jsons above a source file, nearest first, up to the project root. Scans the ones not scanned yet. */
+    fun manifestsAbove(file: VirtualFile): List<ScanResponse> {
+        val out = mutableListOf<ScanResponse>()
+        var dir = file.parent
+        while (dir != null) {
+            dir.findChild("package.json")?.let { pkg -> (states[pkg.path] ?: scan(pkg))?.let(out::add) }
+            if (dir.path == project.basePath) break
+            dir = dir.parent
+        }
+        return out
+    }
 
     fun findProjects(): List<VirtualFile> = DumbService.getInstance(project).runReadActionInSmartMode<List<VirtualFile>> {
         FilenameIndex.getVirtualFilesByName("package.json", GlobalSearchScope.projectScope(project))

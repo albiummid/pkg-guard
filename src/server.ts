@@ -6,12 +6,13 @@ import { formatReport } from './analysis/compat';
 import { generateUpgradeReport } from './analysis/report';
 import { compatFor, fixEffect, latestStable, rangeEdits } from './analysis/fixes';
 import { buildFindings } from './analysis/findings';
+import { importFindings } from './imports/findings';
 import { clearOsvCache } from './sources/osv';
 import { clearRegistryCache, fetchInfo } from './sources/registry';
 import { changelogBetween, fetchMeta, npmUrl } from './sources/changelog';
 import { scan } from './analysis/scan';
 import { compare, isStable } from './versions/semver';
-import { DepEntry, Fix, RangeUpdate, Settings } from './types';
+import { DepEntry, Fix, ManifestFindings, RangeUpdate, Settings } from './types';
 
 type Params = Record<string, any>;
 
@@ -83,6 +84,7 @@ const methods: Record<string, (p: Params) => unknown | Promise<unknown>> = {
   repoUrl: doRepoUrl,
   rangeEdits: (p) => rangeEdits(p.text, p.updates as RangeUpdate[]),
   fixEffect: (p) => fixEffect(p.text, p.entry as DepEntry, p.fix as Fix),
+  importFindings: (p) => importFindings(p.text, p.manifests as ManifestFindings[]),
   clearCache: () => {
     clearOsvCache();
     clearRegistryCache();

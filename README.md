@@ -7,6 +7,7 @@ Vulnerability warnings and update suggestions right inside your `package.json`, 
 ## Features
 
 - **Inline warnings** next to each dependency: known vulnerabilities, newer patch / minor / major versions.
+- **Import warnings**: the same vulnerability warnings on the `import` / `require` lines of vulnerable packages in JS and TS files.
 - **Transitive vulnerabilities** from `yarn.lock` (v1) or `package-lock.json`, shown on the direct dependency that pulls them in.
 - **One-click fixes**: update to the fixed version, pin a transitive package via `resolutions` / `overrides`, ignore an advisory.
 - **Compatibility check** before an update: peer dependencies, `engines.node`, and companion updates for packages that would break.
@@ -44,9 +45,10 @@ A new IDE or language gets its own folder under `platforms/` and reuses `src/`.
 | `manifest/` | package.json parsing and editing, package-manager detection |
 | `sources/` | npm registry, changelog, OSV, audit output and lockfile graphs |
 | `analysis/` | Scan, findings, compatibility, fixes and the upgrade report |
+| `imports/` | Locating package imports in JS/TS source and matching them to findings |
 | `test/` | Unit tests |
 
-- `src/server.ts` is a Node sidecar speaking line-delimited JSON-RPC over stdin/stdout (`scan`, `fixEffect`, `rangeEdits`, `compat`, `changelog`, `repoUrl`, `clearCache`). A new IDE or language integration only needs to spawn it and speak this protocol.
+- `src/server.ts` is a Node sidecar speaking line-delimited JSON-RPC over stdin/stdout (`scan`, `fixEffect`, `rangeEdits`, `importFindings`, `compat`, `changelog`, `repoUrl`, `clearCache`). A new IDE or language integration only needs to spawn it and speak this protocol.
 - `yarn cli core build:server` writes the bundled sidecar to `dist/sidecar/server.js`; `yarn cli core test` runs the unit tests.
 
 ## Development

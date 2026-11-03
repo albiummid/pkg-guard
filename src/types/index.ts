@@ -6,3 +6,4 @@ export * from './registry';
 export * from './report';
 export * from './scan';
 export * from './vulnerability';
+export * from './imports';

@@ -10,6 +10,7 @@ Vulnerability warnings and update suggestions right inside `package.json`, inclu
 - **Squiggles** in the Problems panel: red for high/critical, yellow for moderate, blue for info.
 - **Quick fixes** (lightbulb or `Ctrl+.`): update to the fixed version, pin a transitive package via `resolutions` (yarn) or `overrides` (npm), ignore an advisory, stop suggesting updates for a package.
 - **Transitive vulnerabilities** from `yarn.lock` (v1) or `package-lock.json` (v2/3), shown on the direct dependency that pulls them in, with the path (`@nestjs/platform-express › express › body-parser`).
+- **Import warnings** in JS / TS files: a vulnerable package is flagged on every `import` / `require` of it, with the same end-of-line hint, hover and Problems entry. The nearest `package.json` that declares the package is used (workspace before root).
 - **Status bar** summary; click to re-scan.
 
 ## Sidebar
@@ -44,6 +45,7 @@ Dependents are checked among your direct dependencies, using their installed `no
 |---|---|---|
 | `pkgGuard.enableVulnerabilities` | `true` | |
 | `pkgGuard.checkTransitive` | `true` | needs a supported lockfile |
+| `pkgGuard.importWarnings` | `true` | warnings on imports in JS / TS files |
 | `pkgGuard.enableOutdated` | `true` | |
 | `pkgGuard.showMajorUpdates` | `true` | |
 | `pkgGuard.minSeverity` | `low` | `low` / `moderate` / `high` / `critical` |

@@ -4,7 +4,7 @@
   <vendor>albiummid</vendor>
   <description><![CDATA[
     Inline vulnerability warnings and update suggestions in <code>package.json</code>, including transitive
-    dependencies. Checks peer dependencies and Node engines before an update and offers companion updates.
+    dependencies, also shown on the imports of vulnerable packages in JS / TS files. Checks peer dependencies and Node engines before an update and offers companion updates.
     Requires Node.js 24+ on the machine.
   ]]></description>
 
@@ -13,6 +13,9 @@
 
   <extensions defaultExtensionNs="com.intellij">
     <externalAnnotator language="JSON" implementationClass="dev.pkgguard.PackageJsonAnnotator"/>
+    <!-- every language: JS / TS files are plain text without the JavaScript plugin; ImportAnnotator filters by extension -->
+    <externalAnnotator language="" implementationClass="dev.pkgguard.ImportAnnotator"/>
+    <editor.linePainter implementation="dev.pkgguard.PkgGuardLinePainter"/>
     <toolWindow id="Pkg Guard" anchor="right" icon="/icons/pkgGuard.svg" factoryClass="dev.pkgguard.PkgGuardToolWindowFactory"/>
     <projectConfigurable parentId="tools" id="dev.pkgguard.settings" instance="dev.pkgguard.PkgGuardConfigurable" displayName="Pkg Guard"/>
     <notificationGroup id="Pkg Guard" displayType="BALLOON"/>
