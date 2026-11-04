@@ -24,6 +24,18 @@ dependencies {
 
 kotlin { jvmToolchain(providers.gradleProperty("pkgguard.jvm").get().toInt()) }
 
+// The Node sidecar and the change notes come from the root CLI.
+val isWindows = System.getProperty("os.name").lowercase().contains("win")
+val repoRoot = file("../..")
+fun cli(vararg args: String) = (if (isWindows) listOf("cmd", "/c", "node", "scripts/cli.js") else listOf("node", "scripts/cli.js")) + args
+
+// This version's CHANGELOG.md section as HTML; empty for a dev build whose version has no section yet.
+val changeNotesHtml = providers.exec {
+    workingDir = repoRoot
+    commandLine(cli("changelog", "notes", version.toString(), "--html"))
+    isIgnoreExitValue = true
+}.standardOutput.asText
+
 intellijPlatform {
     instrumentCode = false // Kotlin only: no .form files or @NotNull instrumentation needed
     pluginConfiguration {
@@ -31,18 +43,29 @@ intellijPlatform {
             sinceBuild = providers.gradleProperty("pkgguard.sinceBuild").get()
             untilBuild = provider { null }
         }
+        changeNotes = changeNotesHtml
     }
-    // Only used by `publishPlugin` (the release workflow sets PUBLISH_TOKEN from a repository secret).
+    // Only used by `signPlugin` / `publishPlugin`; the release workflow sets these from repository secrets.
+    signing {
+        certificateChain = providers.environmentVariable("CERTIFICATE_CHAIN")
+        privateKey = providers.environmentVariable("PRIVATE_KEY")
+        password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
+    }
     publishing { token = providers.environmentVariable("PUBLISH_TOKEN") }
+    // Oldest supported IDE and the last standalone IDEA Community release (2025.3+ ships as unified IntelliJ IDEA,
+    // which this Gradle plugin version cannot resolve, so `recommended()` fails).
+    pluginVerification {
+        ides {
+            ide(IntelliJPlatformType.IntellijIdeaCommunity, providers.gradleProperty("pkgguard.ideaVersion").get())
+            ide(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.4")
+        }
+    }
 }
 
-// The Node sidecar is built by the root CLI and shipped inside the plugin jar.
-val isWindows = System.getProperty("os.name").lowercase().contains("win")
-val repoRoot = file("../..")
 val coreDir = repoRoot
 val buildServer by tasks.registering(Exec::class) {
     workingDir = repoRoot
-    commandLine(if (isWindows) listOf("cmd", "/c", "node", "scripts/cli.js", "core", "build:server") else listOf("node", "scripts/cli.js", "core", "build:server"))
+    commandLine(cli("core", "build:server"))
     inputs.dir(coreDir.resolve("src"))
     outputs.file(coreDir.resolve("dist/sidecar/server.js"))
 }

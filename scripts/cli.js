@@ -91,7 +91,9 @@ function editVersionFiles(args) {
     const file = path.join(root, relativePath);
     const before = fs.readFileSync(file, 'utf8');
     const after = edit(before).replace(/--target=node\d+/g, `--target=node${config['node.target']}`);
-    if (before === after) continue;
+    // Compare content, not formatting: JSON by value, everything else ignoring line endings.
+    const normalize = (text) => relativePath.endsWith('.json') ? JSON.stringify(JSON.parse(text)) : text.replace(/\r\n/g, '\n');
+    if (normalize(before) === normalize(after)) continue;
     if (check) { drift = true; console.error(`out of sync: ${relativePath}`); }
     else fs.writeFileSync(file, after);
   }
@@ -164,6 +166,26 @@ function generatedNotes() {
     .map((section) => `### ${section}\n\n${groups.get(section).join('\n')}`).join('\n\n');
 }
 
+// Just enough Markdown for changelog notes: "### " headings, "- " bullets, `code`, **bold**, [text](url).
+function notesToHtml(markdown) {
+  const inline = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>');
+  const output = [];
+  let inList = false;
+  for (const line of markdown.split('\n')) {
+    const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
+    if (!bullet && inList) { output.push('</ul>'); inList = false; }
+    if (bullet) {
+      if (!inList) { output.push('<ul>'); inList = true; }
+      output.push(`<li>${inline(bullet[1])}</li>`);
+    } else if (/^#{3,}\s/.test(line)) output.push(`<h3>${inline(line.replace(/^#+\s+/, ''))}</h3>`);
+    else if (line.trim()) output.push(`<p>${inline(line.trim())}</p>`);
+  }
+  if (inList) output.push('</ul>');
+  return output.join('\n');
+}
+
 function changelogProblems(text) {
   const parsed = parseChangelog(text);
   const problems = [];
@@ -188,7 +210,7 @@ function manageChangelog(args) {
   if (command === 'notes' && version) {
     const section = parseChangelog(readChangelog()).sections.find((item) => item.name === version);
     if (!section?.body) throw new Error(`CHANGELOG.md has no notes for ${version}.`);
-    console.log(section.body);
+    console.log(args.includes('--html') ? notesToHtml(section.body) : section.body);
     return 0;
   }
   if (command === 'add' && version) {
@@ -203,7 +225,7 @@ function manageChangelog(args) {
     console.log(`CHANGELOG.md: added ${version}`);
     return 0;
   }
-  throw new Error('Usage: yarn cli changelog --check | notes <version> | add <version>');
+  throw new Error('Usage: yarn cli changelog --check | notes <version> [--html] | add <version>');
 }
 
 function runStep(title, command, cwd = '.') {

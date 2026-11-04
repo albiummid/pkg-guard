@@ -1,7 +1,7 @@
 name: Release
 
 # Start with: node scripts/cli.js release patch|minor|major --push   (bumps version.yml, commits, tags vX.Y.Z, pushes)
-# Re-publish an existing tag to one or both extension registries from the Actions tab (Run workflow).
+# Re-publish an existing tag to one or all registries from the Actions tab (Run workflow).
 on:
   push:
     tags: ['v*']
@@ -11,10 +11,10 @@ on:
         description: Existing tag to build and publish (e.g. v0.1.3)
         required: true
       target:
-        description: Where to publish the VS Code extension
+        description: Where to publish
         type: choice
-        options: [both, marketplace, openvsx]
-        default: both
+        options: [all, marketplace, openvsx, jetbrains]
+        default: all
 
 permissions:
   contents: write
@@ -58,7 +58,7 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
-      - run: bash ./gradlew buildPlugin --no-daemon
+      - run: bash ./gradlew buildPlugin verifyPlugin --no-daemon
         working-directory: platforms/jetbrains
       - uses: actions/upload-artifact@v4
         with:
@@ -100,7 +100,7 @@ jobs:
   publish-marketplace:
     name: Publish to VS Code Marketplace
     needs: [build, github-release]
-    if: ${{ !cancelled() && needs.build.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.github-release.result) && !contains(needs.build.outputs.tag, '-') && (github.event_name == 'push' || contains(fromJSON('["both","marketplace"]'), inputs.target)) }}
+    if: ${{ !cancelled() && needs.build.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.github-release.result) && !contains(needs.build.outputs.tag, '-') && (github.event_name == 'push' || contains(fromJSON('["all","marketplace"]'), inputs.target)) }}
     runs-on: ubuntu-latest
     env:
       VSCE_PAT: ${{ secrets.VSCE_PAT }}
@@ -129,7 +129,7 @@ jobs:
   publish-openvsx:
     name: Publish to Open VSX
     needs: [build, github-release]
-    if: ${{ !cancelled() && needs.build.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.github-release.result) && !contains(needs.build.outputs.tag, '-') && (github.event_name == 'push' || contains(fromJSON('["both","openvsx"]'), inputs.target)) }}
+    if: ${{ !cancelled() && needs.build.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.github-release.result) && !contains(needs.build.outputs.tag, '-') && (github.event_name == 'push' || contains(fromJSON('["all","openvsx"]'), inputs.target)) }}
     runs-on: ubuntu-latest
     env:
       OVSX_PAT: ${{ secrets.OVSX_PAT }}
@@ -156,17 +156,33 @@ jobs:
           yarn ovsx publish "$(ls dist/vscode/*.vsix)" --pat "$OVSX_PAT"
 
   publish-jetbrains:
-    name: Publish JetBrains plugin
+    name: Publish to JetBrains Marketplace
     needs: [build, github-release]
-    if: ${{ github.event_name == 'push' && !contains(github.ref_name, '-') }}
+    if: ${{ !cancelled() && needs.build.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.github-release.result) && !contains(needs.build.outputs.tag, '-') && (github.event_name == 'push' || contains(fromJSON('["all","jetbrains"]'), inputs.target)) }}
     runs-on: ubuntu-latest
     env:
       PUBLISH_TOKEN: ${{ secrets.JETBRAINS_PUBLISH_TOKEN }}
+      CERTIFICATE_CHAIN: ${{ secrets.JETBRAINS_CERTIFICATE_CHAIN }}
+      PRIVATE_KEY: ${{ secrets.JETBRAINS_PRIVATE_KEY }}
+      PRIVATE_KEY_PASSWORD: ${{ secrets.JETBRAINS_PRIVATE_KEY_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Check for a token
+      - name: Check for a token and signing keys
         id: gate
-        run: echo "has_token=$([ -n "$PUBLISH_TOKEN" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ -z "$PUBLISH_TOKEN" ]; then
+            echo "::warning::JETBRAINS_PUBLISH_TOKEN is not set; skipping the JetBrains Marketplace publish."
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$CERTIFICATE_CHAIN" ] || [ -z "$PRIVATE_KEY" ]; then
+            echo "::error::JETBRAINS_CERTIFICATE_CHAIN and JETBRAINS_PRIVATE_KEY must be set to publish a signed plugin." >&2
+            exit 1
+          fi
+          echo "has_token=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.has_token == 'true'
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-node@v4
         if: steps.gate.outputs.has_token == 'true'
         with:
@@ -182,6 +198,7 @@ jobs:
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
         if: steps.gate.outputs.has_token == 'true'
+      # publishPlugin builds, signs (signPlugin) and uploads the plugin.
       - run: bash ./gradlew publishPlugin --no-daemon
         if: steps.gate.outputs.has_token == 'true'
         working-directory: platforms/jetbrains
