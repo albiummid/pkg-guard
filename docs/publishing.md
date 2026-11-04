@@ -11,11 +11,16 @@ The VS Code extension uses the publisher/namespace `albiummid` (`publisher` in `
 ## One-time setup
 
 ### VS Code Marketplace
-1. Create the publisher `albiummid` at https://marketplace.visualstudio.com/manage.
-2. In Azure DevOps (https://dev.azure.com), create a Personal Access Token: Organization **All accessible organizations**, scope **Marketplace > Manage**.
-3. Add it as the repo secret `VSCE_PAT`.
+CI publishes with [Trusted Publishing](https://code.visualstudio.com/api/working-with-extensions/publishing-extension) (`vsce publish --oidc`): GitHub's OIDC token is exchanged for a short-lived Marketplace credential, so there is no PAT or secret to store or rotate.
 
-> Azure DevOps retires global ("All accessible organizations") PATs on **December 1, 2026**. After that date `VSCE_PAT` stops working, and publishing needs Microsoft Entra ID (`vsce publish --azure-credential`); see https://code.visualstudio.com/api/working-with-extensions/publishing-extension.
+1. Create the publisher `albiummid` at https://marketplace.visualstudio.com/manage.
+2. Open the publisher, select **Trusted Publishing**, expand **Create**, and enter:
+   - Repository owner: `albiummid`
+   - Repository: `pkg-guard`
+   - Workflow: `release.yml`
+   - Environment: leave empty
+
+Without a policy, the `publish-marketplace` job fails (it does not skip). For a one-off manual publish, use `yarn vsce login albiummid` with a PAT, or upload the `.vsix` on the publisher page.
 
 ### Open VSX
 1. Sign in at https://open-vsx.org with GitHub, then link your Eclipse account and sign the Publisher Agreement (Settings > Profile).
@@ -23,7 +28,7 @@ The VS Code extension uses the publisher/namespace `albiummid` (`publisher` in `
 3. Create the namespace once: `yarn ovsx create-namespace albiummid --pat <token>`.
 4. Add the token as the repo secret `OVSX_PAT`.
 
-Check a token locally with `yarn vsce verify-pat albiummid` or `yarn ovsx verify-pat albiummid`.
+Check the token locally with `yarn ovsx verify-pat albiummid`.
 
 ### JetBrains Marketplace
 The plugin must already exist on the Marketplace (the first version is uploaded by hand at https://plugins.jetbrains.com/plugin/add); CI only publishes new versions.
@@ -43,7 +48,7 @@ With a token but no signing secrets, the JetBrains job fails instead of publishi
 ```
 yarn cli release patch|minor|major --push
 ```
-The `v*` tag starts the Release workflow. It builds, tests and runs the JetBrains plugin verifier, creates the GitHub release, then runs `publish-marketplace`, `publish-openvsx` and `publish-jetbrains` as independent jobs. A job with no token secret logs a warning and skips. Tags with a `-` suffix (prereleases) are never published.
+The `v*` tag starts the Release workflow. It builds, tests and runs the JetBrains plugin verifier, creates the GitHub release, then runs `publish-marketplace`, `publish-openvsx` and `publish-jetbrains` as independent jobs. The Open VSX and JetBrains jobs log a warning and skip when their token secret is missing. Tags with a `-` suffix (prereleases) are never published.
 
 ## Re-publishing one registry
 If one registry failed, open Actions > Release > **Run workflow**, enter the existing tag (for example `v0.1.3`) and choose the target `marketplace`, `openvsx`, `jetbrains` or `all`. This rebuilds that tag and publishes it without creating another GitHub release. Every registry rejects a version it already has, so this only helps for a registry the version never reached.

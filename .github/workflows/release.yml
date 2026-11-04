@@ -94,16 +94,18 @@ jobs:
           case "${GITHUB_REF_NAME}" in *-*) flags="--prerelease" ;; esac
           gh release create "${GITHUB_REF_NAME}" $flags --notes-file release-notes.md --title "Pkg Guard ${GITHUB_REF_NAME}" $(find dist -type f \( -name '*.vsix' -o -name '*.zip' \))
 
-  # The publish jobs only run when their token secret exists, and never for prereleases.
-  # Marketplace and Open VSX are separate jobs so one failing does not block the other.
+  # The publish jobs never run for prereleases. Open VSX and JetBrains skip when their token secret is missing;
+  # the VS Code Marketplace uses Trusted Publishing (GitHub OIDC, no secret), set up on the publisher page.
+  # Each registry is a separate job so one failing does not block the others.
   # Open VSX also serves Cursor, VSCodium, Windsurf and other VS Code forks.
   publish-marketplace:
     name: Publish to VS Code Marketplace
     needs: [build, github-release]
     if: ${{ !cancelled() && needs.build.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.github-release.result) && !contains(needs.build.outputs.tag, '-') && (github.event_name == 'push' || contains(fromJSON('["all","marketplace"]'), inputs.target)) }}
     runs-on: ubuntu-latest
-    env:
-      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -119,12 +121,7 @@ jobs:
           name: dist
           path: dist
       - name: Publish
-        run: |
-          if [ -z "$VSCE_PAT" ]; then
-            echo "::warning::VSCE_PAT is not set; skipping the VS Code Marketplace publish."
-            exit 0
-          fi
-          yarn vsce publish --packagePath "$(ls dist/vscode/*.vsix)" --pat "$VSCE_PAT"
+        run: yarn vsce publish --packagePath "$(ls dist/vscode/*.vsix)" --oidc
 
   publish-openvsx:
     name: Publish to Open VSX
