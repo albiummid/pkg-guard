@@ -47,7 +47,7 @@ class PackageJsonAnnotator : ExternalAnnotator<PackageJsonAnnotator.Input, ScanR
             val end = lineStart + f.entry.end
             if (end > doc.textLength) continue
             val b = holder.newAnnotation(severityOf(f.level), f.message).range(TextRange(lineStart + f.entry.nameStart, end))
-            if (f.kind == "outdated") b.textAttributes(com.intellij.openapi.editor.DefaultLanguageHighlighterColors.LINE_COMMENT)
+            if (f.kind == "outdated" || f.kind == "stale") b.textAttributes(com.intellij.openapi.editor.DefaultLanguageHighlighterColors.LINE_COMMENT)
             f.fixes.forEach { b.withFix(ApplyFixIntention(f, it)) }
             b.create()
         }

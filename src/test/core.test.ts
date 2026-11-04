@@ -11,7 +11,7 @@ import { Vuln } from '../types/index';
 import { ScanResult, Settings } from '../types';
 
 const settings: Settings = {
-  enableVulnerabilities: true, checkTransitive: true, enableOutdated: true, showMajorUpdates: true,
+  enableVulnerabilities: true, checkTransitive: true, enableOutdated: true, showMajorUpdates: true, checkSync: true,
   minSeverity: 'low', auditFallback: true, registry: '', ignoredAdvisories: [], ignoredPackages: [],
 };
 
@@ -208,4 +208,73 @@ test('detectPm: lockfile, packageManager field, fallback; override section per m
   assert.equal(detectPm(mk(), { packageManager: 'pnpm@9.1.0' }).name, 'pnpm');
   const nested = addToSection('{\n  "name": "x"\n}\n', 'pnpm.overrides', 'a', '^1.0.0');
   assert.deepEqual(JSON.parse(nested).pnpm, { overrides: { a: '^1.0.0' } });
+});
+
+const SYNC_PKG = `{
+  "dependencies": {
+    "lodash": "^4.17.15",
+    "exact": "4.17.15",
+    "same": "^1.0.0",
+    "guessed": "^2.1.0",
+    "missing": "^1.0.0",
+    "old": "^4.0.0",
+    "drift": "^1.0.0"
+  },
+  "optionalDependencies": { "fsevents": "^2.0.0" }
+}`;
+
+function syncScan(over: Partial<ScanResult> = {}): ScanResult {
+  return {
+    entries: locateDeps(SYNC_PKG),
+    installed: new Map([['lodash', '4.17.21'], ['exact', '4.17.15'], ['same', '1.0.0'], ['guessed', '2.1.0'], ['missing', '1.0.0'], ['old', '4.1.0'], ['drift', '1.2.0']]),
+    installedFrom: new Map([['lodash', 'lock'], ['exact', 'lock'], ['same', 'node_modules'], ['guessed', 'floor'], ['missing', 'lock'], ['old', 'lock'], ['drift', 'lock']]),
+    onDisk: new Map([['lodash', '4.17.21'], ['exact', '4.17.15'], ['same', '1.0.0'], ['guessed', '2.1.0'], ['old', '3.0.0'], ['drift', '1.1.0']]),
+    hasNodeModules: true,
+    hits: [], info: new Map(), lock: 'yarn',
+    pm: { name: 'yarn', installCmd: 'yarn install', overrideSection: 'resolutions' },
+    source: 'none', notes: [],
+    ...over,
+  };
+}
+
+test('buildFindings: stale range offers to raise the range to the confirmed installed version', () => {
+  const f = buildFindings(syncScan(), settings).filter((x) => x.kind === 'stale');
+  assert.deepEqual(f.map((x) => x.entry.name), ['lodash']); // not exact, not equal to floor, not a floor guess
+  assert.deepEqual(f[0].fixes[0], { type: 'setVersion', range: '^4.17.21', title: 'Set lodash range to ^4.17.21 (matches installed)' });
+  assert.equal(buildFindings(syncScan(), { ...settings, checkSync: false }).filter((x) => x.kind === 'stale').length, 0);
+});
+
+test('buildFindings: out-of-sync install offers to run the package manager', () => {
+  const f = buildFindings(syncScan(), settings).filter((x) => x.kind === 'unsynced');
+  const by = new Map(f.map((x) => [x.entry.name, x]));
+  assert.deepEqual([...by.keys()], ['missing', 'old', 'drift']); // optional fsevents is skipped
+  assert.match(by.get('missing')!.message, /is not installed/);
+  assert.match(by.get('old')!.message, /has 3\.0\.0 installed, which doesn't satisfy \^4\.0\.0/);
+  assert.match(by.get('drift')!.message, /1\.1\.0 in node_modules but 1\.2\.0 in the lockfile/);
+  assert.deepEqual(by.get('missing')!.fixes, [{ type: 'install', title: 'Run `yarn install`' }]);
+  assert.equal(buildFindings(syncScan({ hasNodeModules: false }), settings).filter((x) => x.kind === 'unsynced').length, 0);
+});
+
+test('fixEffect: install fix maps to an install effect', () => {
+  const { fixEffect } = require('../analysis/fixes') as typeof import('../analysis/fixes');
+  const e = locateDeps(SYNC_PKG)[0];
+  assert.deepEqual(fixEffect(SYNC_PKG, e, { type: 'install', title: 'x' }), { type: 'install' });
+});
+
+test('scan: records node_modules versions and where each installed version came from', async () => {
+  const fs = require('node:fs') as typeof import('node:fs');
+  const os = require('node:os') as typeof import('node:os');
+  const path = require('node:path') as typeof import('node:path');
+  const { scan } = require('../analysis/scan') as typeof import('../analysis/scan');
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pg-'));
+  fs.mkdirSync(path.join(d, 'node_modules', 'a'), { recursive: true });
+  fs.writeFileSync(path.join(d, 'node_modules', 'a', 'package.json'), '{"version":"1.3.0"}');
+  const text = '{\n  "dependencies": {\n    "a": "^1.0.0",\n    "b": "^2.0.0"\n  }\n}';
+  const r = await scan(text, path.join(d, 'package.json'), { ...settings, enableVulnerabilities: false, enableOutdated: false });
+  assert.equal(r.hasNodeModules, true);
+  assert.equal(r.onDisk!.get('a'), '1.3.0');
+  assert.equal(r.installedFrom!.get('a'), 'node_modules');
+  assert.equal(r.installedFrom!.get('b'), 'floor');
+  const kinds = buildFindings(r, settings).map((x) => `${x.entry.name}:${x.kind}`);
+  assert.deepEqual(kinds, ['a:stale', 'b:unsynced']);
 });

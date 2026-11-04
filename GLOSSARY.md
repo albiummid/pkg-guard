@@ -35,12 +35,20 @@ _Avoid_: Indirect vulnerability, nested vulnerability
 ### Findings
 
 **Finding**:
-A warning shown on one dependency line in `package.json`, with the Fixes and Suppressions available for it. Its kind is one of: vulnerability, Transitive vulnerability, available Update, or deprecation. One Finding groups every Vulnerability of its kind on that line.
+A warning shown on one dependency line in `package.json`, with the Fixes and Suppressions available for it. Its kind is one of: vulnerability, Transitive vulnerability, available Update, deprecation, Stale range, or Out-of-sync install. One Finding groups every Vulnerability of its kind on that line.
 _Avoid_: Issue, diagnostic, alert
 
 **Import warning**:
 The vulnerability and Transitive vulnerability Findings of a dependency, repeated on an `import` / `require` of that package in a JS or TS source file. Uses the nearest `package.json` above the file that declares the package.
 _Avoid_: Import finding, import diagnostic
+
+**Stale range**:
+A Finding on a Declared range whose floor is below the Installed version that the lockfile or `node_modules` confirms, while the range still allows that version. For example, `^4.17.15` with 4.17.21 installed. Its Update raises the range to the Installed version.
+_Avoid_: Outdated range, behind
+
+**Out-of-sync install**:
+A Finding on a dependency whose `node_modules` copy is missing or doesn't satisfy the Declared range, or whose lockfile version doesn't satisfy the range or differs from the `node_modules` copy. Reported only when a `node_modules` folder exists, and never for optional dependencies. Its Fix is a Sync.
+_Avoid_: Missing dependency, drift
 
 **Severity**:
 How serious a Vulnerability is: critical, high, moderate, low or unknown. Comes from the Advisory.
@@ -53,7 +61,7 @@ _Avoid_: Severity
 ### Actions
 
 **Fix**:
-A one-click action that edits `package.json` so a finding goes away. Either an Update or a Pin.
+A one-click action that makes a finding go away. Either an Update or a Pin, which edit `package.json`, or a Sync.
 _Avoid_: Patch, remediation
 
 **Update**:
@@ -63,6 +71,10 @@ _Avoid_: Upgrade, bump
 **Pin**:
 A Fix that forces the version of a transitive package through `resolutions` or `overrides`.
 _Avoid_: Override, resolution
+
+**Sync**:
+A Fix that runs the package manager's install so `node_modules` and the lockfile match `package.json`. Doesn't change the Declared range.
+_Avoid_: Reinstall, restore
 
 **Suppression**:
 A one-click action that hides a finding without changing the dependency, stored in host settings. Either ignoring an Advisory or ignoring a package. Leaves the vulnerable version in place.

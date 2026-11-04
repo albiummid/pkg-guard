@@ -10,7 +10,7 @@ import { detectPm } from '../manifest/packageManager';
 import { Graph, Hit } from '../types/index';
 import { DepEntry, PackageManager, RegistryInfo, ScanResult, Settings } from '../types';
 
-const SKIP_RANGE = /^(workspace:|file:|link:|git|http|npm:|github:|portal:|patch:|catalog:)|\//;
+export const SKIP_RANGE = /^(workspace:|file:|link:|git|http|npm:|github:|portal:|patch:|catalog:)|\//;
 
 function findLock(dir: string): { file: string; kind: 'yarn' | 'npm' } | null {
   for (let d = dir; ; d = path.dirname(d)) {
@@ -34,6 +34,13 @@ export function readInstalledPkg(dir: string, name: string): any | undefined {
 
 function installedFromNodeModules(dir: string, name: string): string | undefined {
   return readInstalledPkg(dir, name)?.version;
+}
+
+function hasNodeModules(dir: string): boolean {
+  for (let d = dir; ; d = path.dirname(d)) {
+    if (fs.existsSync(path.join(d, 'node_modules'))) return true;
+    if (path.dirname(d) === d) return false;
+  }
 }
 
 async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>): Promise<void> {
@@ -76,13 +83,20 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
   if (lock && !graph) notes.push('lockfile format not supported (yarn berry / package-lock v1?); transitive checks disabled');
   const g: Graph = graph ?? { kind: 'none', nodes: new Map(), roots: new Map() };
   result.lock = g.kind;
+  const from = (result.installedFrom = new Map());
+  const onDisk = (result.onDisk = new Map<string, string>());
+  result.hasNodeModules = hasNodeModules(dir);
   for (const e of entries) {
     const rid = g.roots.get(e.name);
-    const v =
-      (rid && g.nodes.get(rid)?.version) ||
-      installedFromNodeModules(dir, e.name) ||
-      (SKIP_RANGE.test(e.range) ? undefined : baseVersion(e.range) ?? undefined);
-    if (v) result.installed.set(e.name, v);
+    const locked = rid ? g.nodes.get(rid)?.version : undefined;
+    const disk = installedFromNodeModules(dir, e.name);
+    if (disk) onDisk.set(e.name, disk);
+    const floor = SKIP_RANGE.test(e.range) ? undefined : baseVersion(e.range) ?? undefined;
+    const v = locked || disk || floor;
+    if (v) {
+      result.installed.set(e.name, v);
+      from.set(e.name, locked ? 'lock' : disk ? 'node_modules' : 'floor');
+    }
     if (!rid && v) {
       // no lockfile: synthesize a root node so the vulnerability lookup still works
       const id = `${e.name}@${v}`;

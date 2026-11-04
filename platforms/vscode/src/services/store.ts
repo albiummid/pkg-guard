@@ -24,6 +24,7 @@ export function settings(): Settings {
     checkTransitive: c.get('checkTransitive', true),
     enableOutdated: c.get('enableOutdated', true),
     showMajorUpdates: c.get('showMajorUpdates', true),
+    checkSync: c.get('checkSync', true),
     minSeverity: c.get('minSeverity', 'low'),
     auditFallback: c.get('auditFallback', true) && vscode.workspace.isTrusted, // runs yarn/npm audit
     registry: c.get('registry', 'https://registry.npmjs.org'),

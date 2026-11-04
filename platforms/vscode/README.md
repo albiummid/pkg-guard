@@ -49,6 +49,7 @@ Dependents are checked among your direct dependencies, using their installed `no
 | `pkgGuard.importWarnings` | `true` | warnings on imports in JS / TS files |
 | `pkgGuard.enableOutdated` | `true` | |
 | `pkgGuard.showMajorUpdates` | `true` | |
+| `pkgGuard.checkSync` | `true` | flag packages missing from or out of step with `node_modules`, and ranges behind the installed version |
 | `pkgGuard.minSeverity` | `low` | `low` / `moderate` / `high` / `critical` |
 | `pkgGuard.auditFallback` | `true` | |
 | `pkgGuard.registry` | `https://registry.npmjs.org` | |

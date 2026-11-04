@@ -1,5 +1,7 @@
 import { pickAtLeast, suggest } from '../sources/registry';
-import { compare, diffKind, gt, prefixOf } from '../versions/semver';
+import { SKIP_RANGE } from './scan';
+import { satisfies } from '../versions/satisfies';
+import { baseVersion, compare, diffKind, gt, prefixOf } from '../versions/semver';
 import { Hit, SEVERITY_RANK, Severity, Vuln } from '../types/index';
 import { DepEntry, Finding, Fix, ScanResult, Settings } from '../types';
 
@@ -109,6 +111,43 @@ export function buildFindings(r: ScanResult, s: Settings): Finding[] {
         inline: `⚠ ${worst.pkg} ${vs.length} vuln${vs.length === 1 ? '' : 's'}${need ? ` → ^${need}` : ''}`,
         fixes,
       });
+    }
+
+    // --- node_modules / lockfile out of step with the declared range
+    if (s.checkSync && !s.ignoredPackages.includes(e.name) && !SKIP_RANGE.test(e.range)) {
+      const disk = r.onDisk?.get(e.name);
+      const from = r.installedFrom?.get(e.name);
+      const locked = from === 'lock' ? installed : undefined;
+      const why =
+        !r.hasNodeModules || e.section === 'optionalDependencies' ? undefined
+        : !disk ? 'is not installed'
+        : !satisfies(disk, e.range) ? `has ${disk} installed, which doesn't satisfy ${e.range}`
+        : locked && !satisfies(locked, e.range) ? `is locked at ${locked}, which doesn't satisfy ${e.range}`
+        : locked && locked !== disk ? `has ${disk} in node_modules but ${locked} in the lockfile`
+        : undefined;
+      const base = baseVersion(e.range);
+      if (why) {
+        out.push({
+          kind: 'unsynced',
+          entry: e,
+          level: 'warning',
+          message: `${e.name} ${why}. Run ${r.pm.installCmd} to sync node_modules with package.json.`,
+          inline: disk ? `⟳ ${disk} installed` : '⟳ not installed',
+          fixes: [{ type: 'install', title: `Run \`${r.pm.installCmd}\`` }],
+        });
+      } else if (installed && base && (prefix === '^' || prefix === '~') && (from === 'lock' || from === 'node_modules') && gt(installed, base) && satisfies(installed, e.range)) {
+        out.push({
+          kind: 'stale',
+          entry: e,
+          level: 'info',
+          message: `${e.name}: ${installed} is installed but package.json still says ${e.range}`,
+          inline: `≡ ${installed} installed`,
+          fixes: [
+            { type: 'setVersion', range: prefix + installed, title: `Set ${e.name} range to ${prefix + installed} (matches installed)` },
+            { type: 'ignorePackage', name: e.name, title: `Don't suggest updates for ${e.name}` },
+          ],
+        });
+      }
     }
 
     // --- updates / deprecation

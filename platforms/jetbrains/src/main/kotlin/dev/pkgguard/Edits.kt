@@ -52,6 +52,10 @@ object Fixer {
             svc.refreshAll(clearCaches = false)
             return
         }
+        if (effect.type == "install") {
+            svc.states[file.path]?.pm?.let { Installer.install(project, file, it) }
+            return
+        }
         applyEdits(project, file, effect.edits.orEmpty())
         svc.states[file.path]?.pm?.let { Installer.offer(project, file, it) }
     }

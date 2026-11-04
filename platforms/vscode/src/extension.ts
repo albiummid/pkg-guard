@@ -3,7 +3,7 @@ import { registerCommands } from './commands/commands';
 import { fixEffect } from '@core/analysis/fixes';
 import { buildFindings } from '@core/analysis/findings';
 import { Finding, Fix, ScanResult } from '@core/types';
-import { offerInstall } from './services/install';
+import { install, offerInstall } from './services/install';
 import { clearOsvCache } from '@core/sources/osv';
 import { clearRegistryCache } from '@core/sources/registry';
 import { scan } from '@core/analysis/scan';
@@ -137,10 +137,14 @@ async function applyFix(doc: vscode.TextDocument, f: Finding, fx: Fix): Promise<
     await cfg.update(effect.key, [...new Set([...cfg.get<string[]>(effect.key, []), effect.value])], vscode.ConfigurationTarget.Workspace);
     return;
   }
+  const pm = states.get(doc.uri.toString())?.result.pm;
+  if (effect.type === 'install') {
+    if (pm) await install(doc, pm);
+    return;
+  }
   const we = new vscode.WorkspaceEdit();
   for (const e of effect.edits) we.replace(doc.uri, doc.validateRange(new vscode.Range(e.startLine, e.startChar, e.endLine, e.endChar)), e.newText);
   await vscode.workspace.applyEdit(we);
-  const pm = states.get(doc.uri.toString())?.result.pm;
   if (pm) await offerInstall(doc, pm);
 }
 
@@ -152,8 +156,8 @@ class Fixer implements vscode.CodeActionProvider {
     for (const f of st.findings) {
       if (f.entry.line < range.start.line || f.entry.line > range.end.line) continue;
       for (const fx of f.fixes) {
-        const a = new vscode.CodeAction(fx.title, fx.type === 'setVersion' || fx.type === 'addOverride' ? vscode.CodeActionKind.QuickFix : vscode.CodeActionKind.Empty);
-        a.isPreferred = fx.type === 'setVersion' && f.kind === 'vuln';
+        const a = new vscode.CodeAction(fx.title, fx.type === 'setVersion' || fx.type === 'addOverride' || fx.type === 'install' ? vscode.CodeActionKind.QuickFix : vscode.CodeActionKind.Empty);
+        a.isPreferred = (fx.type === 'setVersion' && f.kind === 'vuln') || (fx.type === 'install' && f.kind === 'unsynced');
         a.command = { command: 'pkgGuard.runFix', title: fx.title, arguments: [doc.uri.toString(), f.entry.line, f.kind, f.message, fx] };
         acts.push(a);
       }

@@ -29,6 +29,7 @@ class PkgGuardSettings : PersistentStateComponent<PkgGuardSettings.State> {
         var importWarnings: Boolean = true
         var refreshIntervalHours: Int = 6
         var showMajorUpdates: Boolean = true
+        var checkSync: Boolean = true
         var minSeverity: String = "low"
         var auditFallback: Boolean = true
         var installAfterFix: String = "ask"
@@ -49,6 +50,7 @@ class PkgGuardSettings : PersistentStateComponent<PkgGuardSettings.State> {
         "checkTransitive" to state.checkTransitive,
         "enableOutdated" to state.enableOutdated,
         "showMajorUpdates" to state.showMajorUpdates,
+        "checkSync" to state.checkSync,
         "minSeverity" to state.minSeverity,
         "auditFallback" to (state.auditFallback && project.isTrusted()),
         "registry" to state.registry,
@@ -75,6 +77,7 @@ class PkgGuardConfigurable(private val project: Project) : BoundConfigurable("Pk
                 row { checkBox("Show vulnerability warnings on imports in JS / TS files").bindSelected(s::importWarnings) }
                 row { checkBox("Suggest newer versions from the registry").bindSelected(s::enableOutdated) }
                 row { checkBox("Also suggest updates that cross a major version").bindSelected(s::showMajorUpdates) }
+                row { checkBox("Warn when node_modules doesn't match package.json, and offer to raise ranges to the installed version").bindSelected(s::checkSync) }
                 row { checkBox("Fall back to yarn / npm audit when OSV.dev is unreachable (trusted projects only)").bindSelected(s::auditFallback) }
                 row("Re-scan every (hours):") {
                     intTextField(0..168).bindIntText(s::refreshIntervalHours).comment("Fetches fresh advisories and versions so new vulnerabilities show up in a long-running IDE. 0 turns it off.")

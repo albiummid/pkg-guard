@@ -14,7 +14,7 @@ data class Entry(
 )
 
 data class Fix(
-    val type: String, // setVersion | addOverride | ignoreAdvisory | ignorePackage
+    val type: String, // setVersion | addOverride | ignoreAdvisory | ignorePackage | install
     val title: String,
     val range: String? = null,
     val major: Boolean? = null,
@@ -24,7 +24,7 @@ data class Fix(
 )
 
 data class Finding(
-    val kind: String, // vuln | transitive | outdated | deprecated
+    val kind: String, // vuln | transitive | outdated | deprecated | stale | unsynced
     val entry: Entry,
     val level: String, // error | warning | info
     val message: String,
@@ -66,6 +66,7 @@ data class ScanResponse(
 
 data class TextEdit(val startLine: Int, val startChar: Int, val endLine: Int, val endChar: Int, val newText: String)
 
+/** `type` is edit | setting | install. */
 data class FixEffect(val type: String, val edits: List<TextEdit>? = null, val key: String? = null, val value: String? = null)
 
 data class Issue(val level: String, val text: String)

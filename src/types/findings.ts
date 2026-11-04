@@ -8,16 +8,18 @@ export interface RangeUpdate {
 
 export type FixEffect =
   | { type: 'edit'; edits: TextEdit[] }
-  | { type: 'setting'; key: 'ignoredAdvisories' | 'ignoredPackages'; value: string };
+  | { type: 'setting'; key: 'ignoredAdvisories' | 'ignoredPackages'; value: string }
+  | { type: 'install' };
 
 export type Fix =
   | { type: 'setVersion'; title: string; range: string; major?: boolean }
   | { type: 'addOverride'; title: string; section: string; name: string; range: string }
   | { type: 'ignoreAdvisory'; title: string; id: string }
-  | { type: 'ignorePackage'; title: string; name: string };
+  | { type: 'ignorePackage'; title: string; name: string }
+  | { type: 'install'; title: string };
 
 export interface Finding {
-  kind: 'vuln' | 'transitive' | 'outdated' | 'deprecated';
+  kind: 'vuln' | 'transitive' | 'outdated' | 'deprecated' | 'stale' | 'unsynced';
   entry: DepEntry;
   level: 'error' | 'warning' | 'info';
   message: string;

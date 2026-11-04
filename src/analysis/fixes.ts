@@ -45,6 +45,8 @@ export function fixEffect(text: string, entry: DepEntry, fx: Fix): FixEffect {
       return { type: 'setting', key: 'ignoredAdvisories', value: fx.id };
     case 'ignorePackage':
       return { type: 'setting', key: 'ignoredPackages', value: fx.name };
+    case 'install':
+      return { type: 'install' };
   }
 }
 

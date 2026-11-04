@@ -521,6 +521,11 @@
           "default": true,
           "description": "Also suggest updates that cross a major version."
         },
+        "pkgGuard.checkSync": {
+          "type": "boolean",
+          "default": true,
+          "description": "Warn when node_modules doesn't match package.json, and offer to raise a range to the installed version."
+        },
         "pkgGuard.minSeverity": {
           "type": "string",
           "enum": [

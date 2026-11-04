@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { buildUpgradeReport, compatKey, formatUpgradeReport } from '../analysis/report';
 import { CompatMap, CompatReport, Finding, RegistryInfo, ScanResult, Settings } from '../types';
 
-const settings: Settings = { enableVulnerabilities: true, checkTransitive: true, enableOutdated: true, showMajorUpdates: true, minSeverity: 'low', auditFallback: false, registry: 'https://registry.npmjs.org', ignoredAdvisories: [], ignoredPackages: [] };
+const settings: Settings = { enableVulnerabilities: true, checkTransitive: true, enableOutdated: true, showMajorUpdates: true, checkSync: true, minSeverity: 'low', auditFallback: false, registry: 'https://registry.npmjs.org', ignoredAdvisories: [], ignoredPackages: [] };
 
 type Dep = { name: string; installed: string; versions: string[]; deprecated?: Record<string, string>; section?: 'dependencies' | 'devDependencies' };
 
