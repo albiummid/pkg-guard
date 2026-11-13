@@ -1,7 +1,7 @@
 // Line-delimited JSON-RPC over stdio, used by the JetBrains plugin. One request per line: {"id":1,"method":"scan","params":{...}}.
 // Replies are {"id":1,"result":...} or {"id":1,"error":"message"}. Anything else on stdout would corrupt the stream, so logs go to stderr.
 import * as readline from 'readline';
-import { bumpTargets } from './versions/bump';
+import { bumpTargets, newerVersions } from './versions/bump';
 import { formatReport } from './analysis/compat';
 import { generateUpgradeReport } from './analysis/report';
 import { compatFor, fixEffect, latestStable, rangeEdits } from './analysis/fixes';
@@ -21,11 +21,16 @@ async function doScan(p: Params) {
   const result = await scan(p.text, p.pkgFile, settings);
   const info: Record<string, { latest?: string; versions: string[]; deprecated: Record<string, string> }> = {};
   const bumps: Record<string, ReturnType<typeof bumpTargets>> = {};
+  /** stable versions newer than the installed one, newest first: hosts never compare versions themselves */
+  const newer: Record<string, string[]> = {};
   for (const [name, i] of result.info) {
     // manifests are large and only needed server-side
     info[name] = { latest: i.latest, versions: i.versions.filter(isStable).sort((a, b) => compare(b, a)).slice(0, 80), deprecated: i.deprecated };
     const installed = result.installed.get(name);
-    if (installed) bumps[name] = bumpTargets(installed, i.versions);
+    if (installed) {
+      bumps[name] = bumpTargets(installed, i.versions);
+      newer[name] = newerVersions(installed, i.versions).slice(0, 80);
+    }
   }
   return {
     entries: result.entries,
@@ -33,6 +38,7 @@ async function doScan(p: Params) {
     findings: buildFindings(result, settings),
     info,
     bumps,
+    newer,
     lock: result.lock,
     pm: result.pm,
     source: result.source,

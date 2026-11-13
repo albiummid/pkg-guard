@@ -409,6 +409,23 @@ test('scan: when OSV fails and the audit fallback is off, the check is reported 
   assert.ok(r.notes.some((n) => /vulnerability check failed/.test(n)), r.notes.join(' | '));
 });
 
+// ---------------------------------------------------------------- sidecar protocol
+
+test('server: a scan response lists only the versions newer than the installed one, newest first', async () => {
+  const { handle } = require('../server') as typeof import('../server');
+  clearRegistryCache();
+  const dir = tmp();
+  fs.mkdirSync(path.join(dir, 'node_modules', 'p'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'node_modules', 'p', 'package.json'), '{"version":"1.2.0"}');
+  const versions = Object.fromEntries(['1.0.0', '1.1.0', '1.2.0', '1.3.0', '2.0.0', '2.1.0-beta.1'].map((v) => [v, {}]));
+  const reply = await withFetch(
+    () => json({ 'dist-tags': { latest: '2.0.0' }, versions }),
+    async () =>
+      JSON.parse(await handle(JSON.stringify({ id: 1, method: 'scan', params: { text: PKG, pkgFile: path.join(dir, 'package.json'), settings: { ...settings, enableVulnerabilities: false } } }))),
+  );
+  assert.deepEqual(reply.result.newer.p, ['2.0.0', '1.3.0']);
+});
+
 // ---------------------------------------------------------------- pins target the manifest the package manager reads
 
 test('fixEffect: a pin for a workspace member edits the root manifest', () => {

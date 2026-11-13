@@ -11,8 +11,10 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.project.DumbService
+import com.intellij.openapi.progress.ProcessCanceledException
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.search.FilenameIndex
@@ -37,59 +39,72 @@ class PkgGuardService(private val project: Project) : Disposable {
     private val log = logger<PkgGuardService>()
     private val alarm = Alarm(Alarm.ThreadToUse.POOLED_THREAD, this)
     private val periodic = Alarm(Alarm.ThreadToUse.POOLED_THREAD, this)
-    private var warnedAboutNode = false
 
-    val states = ConcurrentHashMap<String, ScanResponse>()
     /** Import warnings per JS/TS file path, for the end-of-line text. */
     val importStates = ConcurrentHashMap<String, List<ImportFinding>>()
     val sidecar: Sidecar get() = project.service()
     val settings: PkgGuardSettings get() = project.service()
+
+    private val coordinator = ScanCoordinator(
+        scanner = { path, text -> sidecar.call<ScanResponse>("scan", mapOf("text" to text, "pkgFile" to path, "settings" to settings.forSidecar(project))) },
+        onResult = { _, _ -> if (!project.isDisposed) project.messageBus.syncPublisher(PKG_GUARD_TOPIC).changed() },
+        onError = { e ->
+            log.warn("scan failed", e)
+            if (!project.isDisposed) notify(project, e.message ?: "Scan failed", NotificationType.ERROR)
+        },
+        checkCanceled = { ProgressManager.checkCanceled() },
+        isCancellation = { it is ProcessCanceledException },
+    )
+
+    val states: Map<String, ScanResponse> get() = coordinator.states
 
     /** Editor buffer when the file is open (may be unsaved), else the file on disk. */
     fun textOf(file: VirtualFile): String = ReadAction.compute<String, RuntimeException> {
         FileDocumentManager.getInstance().getDocument(file)?.text ?: String(file.contentsToByteArray(), Charsets.UTF_8)
     }
 
-    fun scanText(file: VirtualFile, text: String): ScanResponse? = try {
-        val result: ScanResponse = sidecar.call("scan", mapOf("text" to text, "pkgFile" to file.path, "settings" to settings.forSidecar(project)))
-        states[file.path] = result
-        project.messageBus.syncPublisher(PKG_GUARD_TOPIC).changed()
-        result
-    } catch (e: Exception) {
-        log.warn("scan failed for ${file.path}", e)
-        if (!warnedAboutNode) {
-            warnedAboutNode = true
-            notify(project, e.message ?: "Scan failed", NotificationType.ERROR)
-        }
-        null
-    }
+    /** Scans `text` of `file`. The last result is reused when the text is unchanged; [force] always asks the scanner again. */
+    fun scanText(file: VirtualFile, text: String, force: Boolean = false): ScanResponse? = coordinator.scan(file.path, text, force)
 
     fun scan(file: VirtualFile): ScanResponse? = scanText(file, textOf(file))
 
-    /** Scan results of the package.jsons above a source file, nearest first, up to the project root. Scans the ones not scanned yet. */
+    /**
+     * Scan results of the package.jsons above a source file, nearest first, up to the content root that holds the file.
+     * A file outside every content root (a scratch file, a library) has none. Scans the ones not scanned yet.
+     */
     fun manifestsAbove(file: VirtualFile): List<ScanResponse> {
+        val root = ReadAction.compute<VirtualFile?, RuntimeException> { ProjectFileIndex.getInstance(project).getContentRootForFile(file) } ?: return emptyList()
         val out = mutableListOf<ScanResponse>()
         var dir = file.parent
         while (dir != null) {
-            dir.findChild("package.json")?.let { pkg -> (states[pkg.path] ?: scan(pkg))?.let(out::add) }
-            if (dir.path == project.basePath) break
+            dir.findChild("package.json")?.let { pkg -> scan(pkg)?.let(out::add) }
+            if (dir == root) break
             dir = dir.parent
         }
         return out
     }
 
-    fun findProjects(): List<VirtualFile> = DumbService.getInstance(project).runReadActionInSmartMode<List<VirtualFile>> {
-        FilenameIndex.getVirtualFilesByName("package.json", GlobalSearchScope.projectScope(project))
-            .filter { !it.path.contains("/node_modules/") }
-            .sortedBy { it.path }
-    }
+    /** Every package.json of the project outside node_modules. Waits for indexing; gives up when the service is disposed. */
+    fun findProjects(): List<VirtualFile> =
+        ReadAction.nonBlocking<List<VirtualFile>> {
+            FilenameIndex.getVirtualFilesByName("package.json", GlobalSearchScope.projectScope(project))
+                .filter { !it.path.contains("/node_modules/") }
+                .sortedBy { it.path }
+        }.inSmartMode(project).expireWith(this).executeSynchronously()
 
     /** Re-scans every package.json of the project in the background, then re-runs the inspections. */
     fun refreshAll(clearCaches: Boolean) {
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 if (clearCaches) sidecar.call<Boolean>("clearCache")
-                findProjects().forEach { scan(it) }
+                for (file in findProjects()) {
+                    if (project.isDisposed) break
+                    coordinator.scan(file.path, textOf(file), force = true)
+                }
+            } catch (e: ProcessCanceledException) {
+                // the project closed or the service was disposed while waiting
+            } catch (e: Exception) {
+                log.warn("refresh failed", e)
             } finally {
                 ApplicationManager.getApplication().invokeLater({ if (!project.isDisposed) DaemonCodeAnalyzer.getInstance(project).restart() }, project.disposed)
             }

@@ -14,12 +14,16 @@ repositories {
     intellijPlatform { defaultRepositories() }
 }
 
+// The tests only need plain JUnit 4 (no IDE fixtures), which the IDE distribution ships.
+val junit4Jar = provider { intellijPlatform.platformPath.resolve("lib/junit4.jar").toFile() }
+
 dependencies {
     intellijPlatform {
         // WebStorm has the same platform + JSON modules; develop against IDEA Community for a smaller download.
         create(IntelliJPlatformType.IntellijIdeaCommunity, providers.gradleProperty("pkgguard.ideaVersion").get())
         pluginVerifier()
     }
+    testImplementation(files(junit4Jar))
 }
 
 kotlin { jvmToolchain(providers.gradleProperty("pkgguard.jvm").get().toInt()) }

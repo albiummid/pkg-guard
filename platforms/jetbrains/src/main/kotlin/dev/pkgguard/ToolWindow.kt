@@ -11,6 +11,7 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
@@ -45,7 +46,7 @@ class PkgGuardToolWindowFactory : ToolWindowFactory, DumbAware {
         val panel = PkgGuardPanel(project)
         toolWindow.contentManager.addContent(ContentFactory.getInstance().createContent(panel, "", false))
         Disposer.register(toolWindow.disposable, panel)
-        panel.reload()
+        panel.scanMissingThenRebuild()
     }
 }
 
@@ -80,18 +81,34 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                 }
             }
         })
-        project.messageBus.connect(this).subscribe(PKG_GUARD_TOPIC, PkgGuardListener { ApplicationManager.getApplication().invokeLater({ reload() }, project.disposed) })
+        // A finished scan only redraws the tree from the stored results. Starting scans from here would make every finished scan start more.
+        project.messageBus.connect(this).subscribe(PKG_GUARD_TOPIC, PkgGuardListener { rebuild() })
     }
 
     private fun selected(): Node? = (tree.lastSelectedPathComponent as? DefaultMutableTreeNode)?.userObject as? Node
 
     private fun open(file: VirtualFile, line: Int, col: Int) = OpenFileDescriptor(project, file, line, col).navigate(true)
 
-    /** Rebuilds the tree from the cached scan results; scans projects that have none yet. */
-    fun reload() {
+    /** Once, when the tool window opens: scans the projects that have no result yet (each scan redraws the tree), then draws what there is. */
+    fun scanMissingThenRebuild() {
         ApplicationManager.getApplication().executeOnPooledThread {
-            val files = svc.findProjects()
-            files.filter { !svc.states.containsKey(it.path) }.forEach { svc.scan(it) }
+            try {
+                svc.findProjects().filter { !svc.states.containsKey(it.path) }.forEach { svc.scan(it) }
+            } catch (e: ProcessCanceledException) {
+                return@executeOnPooledThread // the project closed
+            }
+            rebuild()
+        }
+    }
+
+    /** Rebuilds the tree from the stored scan results. Never starts a scan. */
+    fun rebuild() {
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val files = try {
+                svc.findProjects()
+            } catch (e: ProcessCanceledException) {
+                return@executeOnPooledThread
+            }
             val scripts = files.associateWith { scriptsOf(it) }
             ApplicationManager.getApplication().invokeLater({
                 val root = DefaultMutableTreeNode()
@@ -104,7 +121,8 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                         val s = DefaultMutableTreeNode(SectionNode("$section (${deps.size})"))
                         for (e in deps) {
                             val d = DefaultMutableTreeNode(DepNode(f, e))
-                            st.info[e.name]?.versions.orEmpty().take(30).forEach { d.add(DefaultMutableTreeNode(VersionNode(f, e, it))) }
+                            // only versions newer than the installed one, so "Update to" never downgrades
+                            st.newer[e.name].orEmpty().take(30).forEach { d.add(DefaultMutableTreeNode(VersionNode(f, e, it))) }
                             s.add(d)
                         }
                         p.add(s)
@@ -134,7 +152,16 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                 val st = svc.states[node.file.path]
                 listOfNotNull(
                     st?.let { act("Install all dependencies") { Installer.install(project, node.file, it.pm) } },
-                    act("Re-scan this project") { ApplicationManager.getApplication().executeOnPooledThread { svc.scan(node.file) } },
+                    act("Re-scan this project") {
+                        ApplicationManager.getApplication().executeOnPooledThread {
+                            try {
+                                svc.sidecar.call<Boolean>("clearCache") // fresh advisories and versions, like the toolbar Refresh
+                                svc.scanText(node.file, svc.textOf(node.file), force = true)
+                            } catch (e: ProcessCanceledException) {
+                                // the project closed
+                            }
+                        }
+                    },
                     act("Update all — patch") { UpdateFlow.updateAll(project, node.file, "patch") },
                     act("Update all — minor") { UpdateFlow.updateAll(project, node.file, "minor") },
                     act("Update all — major") { UpdateFlow.updateAll(project, node.file, "major") },
@@ -163,7 +190,7 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
             is VersionNode -> listOf(act("Update to ${node.version}") { UpdateFlow.update(project, node.file, node.entry, node.version) })
             is ScriptNode -> listOf(act("Run script") {
                 val pm = svc.states[node.file.path]?.pm?.name ?: "npm"
-                Installer.run(project, node.file.parent.path, "$pm run ${node.name}")
+                Installer.runScript(project, node.file.parent.path, pm, node.name)
             })
             is SectionNode -> emptyList()
         }
