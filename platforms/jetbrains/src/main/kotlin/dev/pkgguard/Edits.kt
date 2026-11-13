@@ -74,7 +74,7 @@ object Fixer {
             return notify(project, "Save ${target.name} first: \"${fix.title}\" is written there.", NotificationType.WARNING)
         }
         // The edit positions were computed for the text that was scanned: refuse if the line changed since, rather than editing the wrong text.
-        if (effect.file == null && fix.type == "setVersion" && !stillMatches(svc, file, entry)) {
+        if (effect.file == null && fix.type == "setVersion" && !stillMatches(file, entry)) {
             return notify(project, "package.json changed since it was scanned. Wait for the re-scan and try again.", NotificationType.WARNING)
         }
         applyEdits(project, target, edits)
@@ -82,9 +82,10 @@ object Fixer {
         svc.states[file.path]?.pm?.let { Installer.offer(project, file, it) }
     }
 
-    private fun stillMatches(svc: PkgGuardService, file: VirtualFile, entry: Entry): Boolean {
-        val lines = svc.textOf(file).lines()
-        val line = lines.getOrNull(entry.line) ?: return false
+    /** Runs on the EDT (the intention action), where the open document can be read directly. */
+    private fun stillMatches(file: VirtualFile, entry: Entry): Boolean {
+        val text = FileDocumentManager.getInstance().getDocument(file)?.text ?: return false
+        val line = text.lines().getOrNull(entry.line) ?: return false
         return line.getOrNull(entry.versionEnd - 1) != null && line.substring(entry.versionStart, entry.versionEnd) == entry.range
     }
 }

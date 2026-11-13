@@ -22,11 +22,13 @@ const LOCKFILES: { file: string; pm: PackageManager['name']; readable: 'yarn' | 
   { file: 'npm-shrinkwrap.json', pm: 'npm', readable: 'npm' },
 ];
 
+const exists = (p: string): Promise<boolean> => fs.promises.access(p).then(() => true, () => false);
+
 /** The nearest lockfile of any package manager. `kind` is null for the ones this tool cannot read. */
-function findLock(dir: string): { file: string; kind: 'yarn' | 'npm' | null; pm: PackageManager['name'] } | null {
+async function findLock(dir: string): Promise<{ file: string; kind: 'yarn' | 'npm' | null; pm: PackageManager['name'] } | null> {
   for (let d = dir; ; d = path.dirname(d)) {
     for (const l of LOCKFILES) {
-      if (fs.existsSync(path.join(d, l.file))) return { file: path.join(d, l.file), kind: l.readable, pm: l.pm };
+      if (await exists(path.join(d, l.file))) return { file: path.join(d, l.file), kind: l.readable, pm: l.pm };
     }
     if (path.dirname(d) === d) return null;
   }
@@ -44,13 +46,21 @@ export function readInstalledPkg(dir: string, name: string): any | undefined {
   }
 }
 
-function installedFromNodeModules(dir: string, name: string): string | undefined {
-  return readInstalledPkg(dir, name)?.version;
+/** Same lookup as readInstalledPkg without blocking the host's thread; the scan reads one file per dependency. */
+async function installedFromNodeModules(dir: string, name: string): Promise<string | undefined> {
+  for (let d = dir; ; d = path.dirname(d)) {
+    try {
+      return JSON.parse(await fs.promises.readFile(path.join(d, 'node_modules', name, 'package.json'), 'utf8'))?.version;
+    } catch {
+      /* keep walking up */
+    }
+    if (path.dirname(d) === d) return undefined;
+  }
 }
 
-function hasNodeModules(dir: string): boolean {
+async function hasNodeModules(dir: string): Promise<boolean> {
   for (let d = dir; ; d = path.dirname(d)) {
-    if (fs.existsSync(path.join(d, 'node_modules'))) return true;
+    if (await exists(path.join(d, 'node_modules'))) return true;
     if (path.dirname(d) === d) return false;
   }
 }
@@ -90,14 +100,14 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
 
   // 1. resolve what is actually installed (lockfile > node_modules > range)
   let graph: Graph | null = null;
-  const lock = findLock(dir);
+  const lock = await findLock(dir);
   if (lock && lock.pm !== result.pm.name) {
     notes.push(`${path.basename(lock.file)} belongs to ${lock.pm}, not ${result.pm.name}; it was ignored and transitive vulnerability checks are off`);
   } else if (lock && !lock.kind) {
     notes.push(`${path.basename(lock.file)} is not supported yet; transitive vulnerability checks are off`);
   } else if (lock) {
     try {
-      const text = fs.readFileSync(lock.file, 'utf8');
+      const text = await fs.promises.readFile(lock.file, 'utf8');
       if (lock.kind === 'yarn') graph = buildYarnGraph(text, rootDeps);
       else {
         // a workspace member resolves its own nested copies before the root's
@@ -115,11 +125,13 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
   for (const n of g.nodes.values()) result.copies.set(n.name, [...(result.copies.get(n.name) ?? []), n.version]);
   const from = (result.installedFrom = new Map());
   const onDisk = (result.onDisk = new Map<string, string>());
-  result.hasNodeModules = hasNodeModules(dir);
-  for (const e of entries) {
+  result.hasNodeModules = await hasNodeModules(dir);
+  // one read per dependency, all at once, instead of one blocking read after another
+  const disks = await Promise.all(entries.map((e) => installedFromNodeModules(dir, e.name)));
+  for (const [i, e] of entries.entries()) {
     const rid = g.roots.get(e.name);
     const locked = rid ? g.nodes.get(rid)?.version : undefined;
-    const disk = installedFromNodeModules(dir, e.name);
+    const disk = disks[i];
     if (disk) onDisk.set(e.name, disk);
     const floor = SKIP_RANGE.test(e.range) ? undefined : baseVersion(e.range) ?? undefined;
     const v = locked || disk || floor;

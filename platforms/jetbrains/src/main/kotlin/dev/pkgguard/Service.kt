@@ -1,6 +1,5 @@
 package dev.pkgguard
 
-import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.Disposable
@@ -59,9 +58,9 @@ class PkgGuardService(private val project: Project) : Disposable {
     val states: Map<String, ScanResponse> get() = coordinator.states
 
     /** Editor buffer when the file is open (may be unsaved), else the file on disk. */
-    fun textOf(file: VirtualFile): String = ReadAction.compute<String, RuntimeException> {
+    fun textOf(file: VirtualFile): String = ReadAction.nonBlocking<String> {
         FileDocumentManager.getInstance().getDocument(file)?.text ?: String(file.contentsToByteArray(), Charsets.UTF_8)
-    }
+    }.executeSynchronously()
 
     /** Scans `text` of `file`. The last result is reused when the text is unchanged; [force] always asks the scanner again. */
     fun scanText(file: VirtualFile, text: String, force: Boolean = false): ScanResponse? = coordinator.scan(file.path, text, force)
@@ -73,7 +72,7 @@ class PkgGuardService(private val project: Project) : Disposable {
      * A file outside every content root (a scratch file, a library) has none. Scans the ones not scanned yet.
      */
     fun manifestsAbove(file: VirtualFile): List<ScanResponse> {
-        val root = ReadAction.compute<VirtualFile?, RuntimeException> { ProjectFileIndex.getInstance(project).getContentRootForFile(file) } ?: return emptyList()
+        val root = ReadAction.nonBlocking<VirtualFile?> { ProjectFileIndex.getInstance(project).getContentRootForFile(file) }.executeSynchronously() ?: return emptyList()
         val out = mutableListOf<ScanResponse>()
         var dir = file.parent
         while (dir != null) {
@@ -106,7 +105,7 @@ class PkgGuardService(private val project: Project) : Disposable {
             } catch (e: Exception) {
                 log.warn("refresh failed", e)
             } finally {
-                ApplicationManager.getApplication().invokeLater({ if (!project.isDisposed) DaemonCodeAnalyzer.getInstance(project).restart() }, project.disposed)
+                ApplicationManager.getApplication().invokeLater({ if (!project.isDisposed) DaemonRestart.restart(project) }, project.disposed)
             }
         }
     }
@@ -132,7 +131,7 @@ class PkgGuardService(private val project: Project) : Disposable {
         ApplicationManager.getApplication().invokeLater({
             val psi = PsiManager.getInstance(project)
             for (f in FileEditorManager.getInstance(project).openFiles) {
-                if (isSourceFile(f)) psi.findFile(f)?.let { DaemonCodeAnalyzer.getInstance(project).restart(it) }
+                if (isSourceFile(f)) psi.findFile(f)?.let { DaemonRestart.restart(project, it) }
             }
         }, project.disposed)
     }
