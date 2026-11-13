@@ -40,7 +40,7 @@ export function replaceAll(text: string, newText: string): TextEdit {
  * The manifest a Pin must be written to. yarn `resolutions`, npm `overrides` and pnpm `pnpm.overrides` only take effect in the
  * workspace root's package.json, so a Pin found while scanning a workspace member goes there. Undefined = the scanned manifest.
  */
-function pinTarget(pkgFile: string | undefined): string | undefined {
+export function pinTarget(pkgFile: string | undefined): string | undefined {
   if (!pkgFile) return undefined;
   const root = detectPm(path.dirname(pkgFile)).root;
   if (!root) return undefined;

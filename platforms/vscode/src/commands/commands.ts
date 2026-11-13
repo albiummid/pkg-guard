@@ -2,8 +2,8 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { formatReport } from '@core/analysis/compat';
 import { BumpKind, CompatReport, RangeUpdate, RegistryInfo } from '@core/types';
-import { compatFor, latestStable, rangeEdits } from '@core/analysis/fixes';
-import { install, offerInstall, runInTerminal } from '../services/install';
+import { compatFor, latestStable, pinTarget, rangeEdits } from '@core/analysis/fixes';
+import { install, offerInstall, runScript } from '../services/install';
 import { addToSection, locateDeps } from '@core/manifest/packageJson';
 import { addSorted, removeDependency } from '@core/manifest/edit';
 import { detectPm } from '@core/manifest/packageManager';
@@ -19,6 +19,18 @@ type WithUri = { uri: vscode.Uri };
 
 async function openDoc(uri: vscode.Uri): Promise<vscode.TextDocument> {
   return vscode.workspace.openTextDocument(uri);
+}
+
+/** Opens a link that came from registry data. Only web links are opened; anything else (vscode:, file:, command:) is refused. */
+async function openWeb(url: string): Promise<void> {
+  let uri: vscode.Uri;
+  try {
+    uri = vscode.Uri.parse(url, true);
+  } catch {
+    return void vscode.window.showWarningMessage('Pkg Guard did not open a link that is not a valid web address.');
+  }
+  if (uri.scheme !== 'https' && uri.scheme !== 'http') return void vscode.window.showWarningMessage('Pkg Guard only opens http and https links from registry data.');
+  await vscode.env.openExternal(uri);
 }
 
 function pmFor(uri: vscode.Uri) {
@@ -114,20 +126,20 @@ async function openRepo(node: DepNode): Promise<void> {
   const meta = await fetchMeta(node.name, settings().registry);
   const url = meta?.repo ? (meta.repo.directory && meta.repo.host === 'github' ? `${meta.repo.url}/tree/HEAD/${meta.repo.directory}` : meta.repo.url) : meta?.homepage;
   if (!url) return void vscode.window.showWarningMessage(`${node.name} does not declare a repository.`);
-  await vscode.env.openExternal(vscode.Uri.parse(url));
+  await openWeb(url);
 }
 
 /** Release notes for versions in (from, to] of one package, shown as a Markdown preview. */
 async function showNotes(name: string, from: string, to: string, title: string): Promise<void> {
   const meta = await fetchMeta(name, settings().registry);
-  if (!meta?.repo) return void vscode.env.openExternal(vscode.Uri.parse(npmUrl(name)));
+  if (!meta?.repo) return void openWeb(npmUrl(name));
   const repo = meta.repo;
   const releases = repo.host === 'github' ? `${repo.url}/releases` : repo.url;
   const res = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Fetching ${name} release notes…` }, () => changelogBetween(name, repo, from, to));
   if (!res) {
     const open = 'Open releases page';
     const pick = await vscode.window.showInformationMessage(`No release notes found for ${title}.`, open);
-    if (pick) await vscode.env.openExternal(vscode.Uri.parse(releases));
+    if (pick) await openWeb(releases);
     return;
   }
   await showMarkdown(`# ${title}\n\n_Source: ${res.source}_\n\n${res.markdown}`);
@@ -142,7 +154,7 @@ async function changelog(node: DepNode): Promise<void> {
   if (!info || !installed || !versions.length) {
     const meta = await fetchMeta(node.name, settings().registry);
     const url = meta?.repo ? (meta.repo.host === 'github' ? `${meta.repo.url}/releases` : meta.repo.url) : npmUrl(node.name);
-    return void vscode.env.openExternal(vscode.Uri.parse(url));
+    return void openWeb(url);
   }
   const latest = versions[0];
   type Item = vscode.QuickPickItem & { from?: string; to?: string };
@@ -184,8 +196,10 @@ async function updateAll(uri: vscode.Uri, level: BumpKind): Promise<void> {
   for (const e of locateDeps(readText(uri).text)) {
     const installed = st.result.installed.get(e.name);
     const info = st.result.info.get(e.name);
-    if (seen.has(e.name) || !installed || !info) continue;
-    seen.add(e.name);
+    // a package declared in two sections is updated in both
+    const id = `${e.section}|${e.name}`;
+    if (seen.has(id) || !installed || !info) continue;
+    seen.add(id);
     const t = bumpTargets(installed, info.versions);
     const pick = level === 'patch' ? t.patch : level === 'minor' ? (t.minor ?? t.patch) : (t.major ?? t.minor ?? t.patch);
     if (!pick) continue;
@@ -239,7 +253,7 @@ async function fixVulns(uri: vscode.Uri): Promise<void> {
   const pins = new Map<string, { section: string; name: string; range: string }>();
   for (const f of st.findings) {
     for (const fx of f.fixes) {
-      if (fx.type === 'setVersion' && f.kind === 'vuln') updates.set(f.entry.name, { name: f.entry.name, version: fx.range.replace(/^[\^~]/, ''), section: f.entry.section });
+      if (fx.type === 'setVersion' && f.kind === 'vuln') updates.set(`${f.entry.section}|${f.entry.name}`, { name: f.entry.name, version: fx.range.replace(/^(\^|~|>=)/, ''), section: f.entry.section });
       if (fx.type === 'addOverride' && f.kind === 'transitive') pins.set(fx.name, fx);
     }
   }
@@ -251,13 +265,20 @@ async function fixVulns(uri: vscode.Uri): Promise<void> {
   const ok = 'Fix';
   const pick = await vscode.window.showWarningMessage(`Fix ${lines.length} vulnerable packages?`, { modal: true, detail: lines.join('\n') }, ok);
   if (pick !== ok) return;
-  let doc = updates.size ? await setRanges(uri, [...updates.values()]) : await openDoc(uri);
-  if (doc && pins.size) {
-    let text = doc.getText();
+  const doc = updates.size ? await setRanges(uri, [...updates.values()]) : await openDoc(uri);
+  if (!doc) return;
+  if (pins.size) {
+    // yarn resolutions / npm overrides only count in the workspace root's package.json
+    const pinFile = pinTarget(uri.fsPath);
+    const pinUri = pinFile ? vscode.Uri.file(pinFile) : uri;
+    const pinDoc = await openDoc(pinUri);
+    if (pinFile && pinDoc.isDirty) return void vscode.window.showWarningMessage(`Save ${vscode.workspace.asRelativePath(pinUri)} first: the pins are written there.`);
+    let text = pinDoc.getText();
     for (const p of pins.values()) text = addToSection(text, p.section, p.name, p.range);
-    doc = await replaceWhole(uri, text);
+    await replaceWhole(pinUri, text);
+    if (pinFile) await pinDoc.save();
   }
-  if (doc) await offerInstall(doc, pmFor(uri));
+  await offerInstall(doc, pmFor(uri));
 }
 
 async function addDependency(uri: vscode.Uri): Promise<void> {
@@ -288,12 +309,12 @@ async function reveal(uri: vscode.Uri, line: number): Promise<void> {
   ed.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
 }
 
-export function registerCommands(ctx: vscode.ExtensionContext, refresh: () => void): void {
+export function registerCommands(ctx: vscode.ExtensionContext, refresh: () => void, rescan: (uri: vscode.Uri) => void): void {
   const reg = (id: string, fn: (...a: any[]) => unknown) => ctx.subscriptions.push(vscode.commands.registerCommand(id, fn));
   const uriOf = (n: WithUri | vscode.Uri) => (n instanceof vscode.Uri ? n : n.uri);
 
   reg('pkgGuard.refreshTree', refresh);
-  reg('pkgGuard.rescanProject', (n: WithUri) => scanUri(uriOf(n)));
+  reg('pkgGuard.rescanProject', (n: WithUri) => rescan(uriOf(n)));
   reg('pkgGuard.openPackageJson', async (n: WithUri) => void (await vscode.window.showTextDocument(await openDoc(uriOf(n)))));
   reg('pkgGuard.installAll', async (n: WithUri | ProjectNode | ActionNode) => install(await openDoc(uriOf(n)), pmFor(uriOf(n))));
   reg('pkgGuard.fixVulns', (n: WithUri) => fixVulns(uriOf(n)));
@@ -304,8 +325,7 @@ export function registerCommands(ctx: vscode.ExtensionContext, refresh: () => vo
   reg('pkgGuard.upgradeReport', (n?: WithUri) => upgradeReport(n));
 
   reg('pkgGuard.runScript', (n: ScriptNode) => {
-    const pm = pmFor(n.uri);
-    runInTerminal(`${n.name} · ${path.basename(path.dirname(n.uri.fsPath))}`, path.dirname(n.uri.fsPath), `${pm.name} run ${n.name}`);
+    runScript(pmFor(n.uri), n.name, path.dirname(n.uri.fsPath));
   });
   reg('pkgGuard.revealScript', (n: ScriptNode) => reveal(n.uri, n.line));
   reg('pkgGuard.revealDep', async (n: DepNode) => {
@@ -313,7 +333,7 @@ export function registerCommands(ctx: vscode.ExtensionContext, refresh: () => vo
     if (e) await reveal(n.uri, e.line);
   });
 
-  reg('pkgGuard.openNpm', (n: DepNode) => vscode.env.openExternal(vscode.Uri.parse(npmUrl(n.name))));
+  reg('pkgGuard.openNpm', (n: DepNode) => openWeb(npmUrl(n.name)));
   reg('pkgGuard.openRepo', openRepo);
   reg('pkgGuard.changelog', changelog);
   reg('pkgGuard.updateLatest', async (n: DepNode) => {

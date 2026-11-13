@@ -17,12 +17,22 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "In an untrusted workspace Pkg Guard still reads package.json and checks vulnerabilities and updates, but it will not run scripts, installs or audit commands."
+      "description": "In an untrusted workspace Pkg Guard still reads package.json and checks vulnerabilities and updates, but it will not run scripts, installs or audit commands, and it ignores workspace settings that choose the registry or that run commands.",
+      "restrictedConfigurations": [
+        "pkgGuard.registry",
+        "pkgGuard.installAfterFix",
+        "pkgGuard.auditFallback"
+      ]
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Pkg Guard reads node_modules and lockfiles from the local file system, which virtual workspaces do not have."
     }
   },
   "main": "./dist/extension.js",
   "activationEvents": [
-    "workspaceContains:**/package.json"
+    "workspaceContains:**/package.json",
+    "onLanguage:json"
   ],
   "contributes": {
     "viewsContainers": {
@@ -535,12 +545,12 @@
             "critical"
           ],
           "default": "low",
-          "description": "Hide vulnerabilities below this severity."
+          "description": "Hide vulnerabilities below this severity. Advisories that have no severity rating are always shown."
         },
         "pkgGuard.auditFallback": {
           "type": "boolean",
           "default": true,
-          "description": "If OSV.dev is unreachable, fall back to `yarn audit` / `npm audit`."
+          "description": "If OSV.dev is unreachable, fall back to `yarn audit` / `npm audit`. These need the network too, a yarn.lock v1 or package-lock.json, and a trusted workspace. If the audit fails as well, the scan notes say so."
         },
         "pkgGuard.installAfterFix": {
           "type": "string",
@@ -563,7 +573,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "Advisory ids (GHSA-..., CVE-...) to ignore."
+          "description": "Advisory ids (GHSA-..., CVE-...) to ignore. Any id of an advisory matches it."
         },
         "pkgGuard.ignoredPackages": {
           "type": "array",
