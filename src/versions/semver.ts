@@ -67,13 +67,20 @@ export function baseVersion(range: string): string | null {
   return `${m[1]}.${n(m[2])}.${n(m[3])}${m[4] ?? ''}`;
 }
 
-/** Operator prefix to keep when rewriting a range ("^", "~" or ""). */
+/** Operator prefix to keep when rewriting a range ("^", "~", ">=" or ""). */
 export function prefixOf(range: string): string {
   const t = range.trim();
   if (t.startsWith('^')) return '^';
   if (t.startsWith('~')) return '~';
-  if (/^(>=|>|<|<=)/.test(t)) return '^';
+  if (t.startsWith('>=')) return '>=';
+  if (/^(>|<|<=)/.test(t)) return '^';
   return '';
+}
+
+/** A dist-tag used as a range ("next", "canary", "latest"): it has no floor and no fixed meaning. */
+export function isTagRange(range: string): boolean {
+  const t = range.trim();
+  return /^[A-Za-z][\w.-]*$/.test(t) && !/^[xX]$/.test(t);
 }
 
 export function isStable(v: string): boolean {

@@ -2,17 +2,30 @@ import { compare, gt, isStable, major } from '../versions/semver';
 import { Manifest, RegistryInfo, Suggestion } from '../types';
 
 const TTL = 60 * 60 * 1000;
-const cache = new Map<string, { t: number; info: RegistryInfo | null }>();
+/** A failure that may be temporary (rate limit, timeout, 5xx) is only remembered briefly. */
+const RETRY_TTL = 60 * 1000;
+const cache = new Map<string, { t: number; ttl: number; info: RegistryInfo | null }>();
+const inflight = new Map<string, Promise<RegistryInfo | null>>();
 
 export function clearRegistryCache(): void {
   cache.clear();
 }
 
-export async function fetchInfo(name: string, registry: string): Promise<RegistryInfo | null> {
+export function fetchInfo(name: string, registry: string): Promise<RegistryInfo | null> {
   const key = `${registry}|${name}`;
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.t < TTL) return hit.info;
+  if (hit && Date.now() - hit.t < hit.ttl) return Promise.resolve(hit.info);
+  const running = inflight.get(key);
+  if (running) return running;
+  const p = load(name, registry, key);
+  inflight.set(key, p);
+  void p.then(() => inflight.delete(key));
+  return p;
+}
+
+async function load(name: string, registry: string, key: string): Promise<RegistryInfo | null> {
   let info: RegistryInfo | null = null;
+  let ttl = TTL;
   try {
     const url = `${registry.replace(/\/$/, '')}/${name.replace('/', '%2f')}`;
     const res = await fetch(url, {
@@ -28,11 +41,14 @@ export async function fetchInfo(name: string, registry: string): Promise<Registr
         manifests[v] = { dependencies: m.dependencies, peerDependencies: m.peerDependencies, peerDependenciesMeta: m.peerDependenciesMeta, engines: m.engines, deprecated: m.deprecated };
       }
       info = { latest: j['dist-tags']?.latest, versions: Object.keys(j.versions ?? {}), deprecated, manifests };
+    } else if (res.status !== 404) {
+      ttl = RETRY_TTL;
     }
   } catch {
     info = null;
+    ttl = RETRY_TTL;
   }
-  cache.set(key, { t: Date.now(), info });
+  cache.set(key, { t: Date.now(), ttl, info });
   return info;
 }
 

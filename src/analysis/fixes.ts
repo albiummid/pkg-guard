@@ -1,7 +1,9 @@
 // Editor-independent operations shared by the VS Code extension and the JetBrains sidecar (server.ts). No `vscode` imports here.
+import * as fs from 'fs';
 import * as path from 'path';
 import { checkCompat, findCompanion } from './compat';
 import { addToSection, locateDeps } from '../manifest/packageJson';
+import { detectPm } from '../manifest/packageManager';
 import { fetchInfo } from '../sources/registry';
 import { satisfies } from '../versions/satisfies';
 import { readInstalledPkg } from './scan';
@@ -34,13 +36,29 @@ export function replaceAll(text: string, newText: string): TextEdit {
   return { startLine: 0, startChar: 0, endLine: lines.length - 1, endChar: lines[lines.length - 1].length, newText };
 }
 
+/**
+ * The manifest a Pin must be written to. yarn `resolutions`, npm `overrides` and pnpm `pnpm.overrides` only take effect in the
+ * workspace root's package.json, so a Pin found while scanning a workspace member goes there. Undefined = the scanned manifest.
+ */
+function pinTarget(pkgFile: string | undefined): string | undefined {
+  if (!pkgFile) return undefined;
+  const root = detectPm(path.dirname(pkgFile)).root;
+  if (!root) return undefined;
+  const manifest = path.join(root, 'package.json');
+  return path.resolve(manifest) !== path.resolve(pkgFile) && fs.existsSync(manifest) ? manifest : undefined;
+}
+
 /** What applying a finding's fix means: text edits for package.json, or an ignore-list entry for the host's settings. */
-export function fixEffect(text: string, entry: DepEntry, fx: Fix): FixEffect {
+export function fixEffect(text: string, entry: DepEntry, fx: Fix, pkgFile?: string): FixEffect {
   switch (fx.type) {
     case 'setVersion':
       return { type: 'edit', edits: [{ startLine: entry.line, startChar: entry.versionStart, endLine: entry.line, endChar: entry.versionEnd, newText: fx.range }] };
-    case 'addOverride':
-      return { type: 'edit', edits: [replaceAll(text, addToSection(text, fx.section, fx.name, fx.range))] };
+    case 'addOverride': {
+      const file = pinTarget(pkgFile);
+      const source = file ? fs.readFileSync(file, 'utf8') : text;
+      const edits = [replaceAll(source, addToSection(source, fx.section, fx.name, fx.range))];
+      return file ? { type: 'edit', edits, file } : { type: 'edit', edits };
+    }
     case 'ignoreAdvisory':
       return { type: 'setting', key: 'ignoredAdvisories', value: fx.id };
     case 'ignorePackage':

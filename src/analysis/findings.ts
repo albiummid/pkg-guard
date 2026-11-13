@@ -1,7 +1,7 @@
 import { pickAtLeast, suggest } from '../sources/registry';
 import { SKIP_RANGE } from './scan';
 import { satisfies } from '../versions/satisfies';
-import { baseVersion, compare, diffKind, gt, prefixOf } from '../versions/semver';
+import { baseVersion, compare, diffKind, gt, isTagRange, major, prefixOf } from '../versions/semver';
 import { Hit, SEVERITY_RANK, Severity, Vuln } from '../types/index';
 import { DepEntry, Finding, Fix, ScanResult, Settings } from '../types';
 
@@ -41,7 +41,9 @@ export function buildFindings(r: ScanResult, s: Settings): Finding[] {
   const out: Finding[] = [];
   const minRank = SEVERITY_RANK[s.minSeverity];
   const ignored = new Set(s.ignoredAdvisories);
-  const hits = r.hits.filter((h) => SEVERITY_RANK[h.vuln.severity] >= minRank && !ignored.has(h.vuln.id));
+  // an advisory with no rating is never filtered out by the minimum: hiding what nobody has rated would hide malware records too
+  const isIgnored = (v: Vuln) => ignored.has(v.id) || !!v.aliases?.some((a) => ignored.has(a));
+  const hits = r.hits.filter((h) => (h.vuln.severity === 'unknown' || SEVERITY_RANK[h.vuln.severity] >= minRank) && !isIgnored(h.vuln));
   const overrideSection = r.pm.overrideSection;
 
   for (const e of r.entries) {
@@ -61,16 +63,21 @@ export function buildFindings(r: ScanResult, s: Settings): Finding[] {
       appliedTarget = target;
       if (target) {
         const range = prefix + target;
-        fixes.push({ type: 'setVersion', range, title: `Update ${e.name} to ${range} (fixes ${direct.length} ${direct.length === 1 ? 'advisory' : 'advisories'})` });
+        // only advisories that name a fixed version are known to be fixed by the target
+        const fixed = direct.filter((v) => v.fixedIn && compare(target, v.fixedIn) >= 0).length;
+        fixes.push({ type: 'setVersion', range, title: `Update ${e.name} to ${range} (fixes ${fixed} ${fixed === 1 ? 'advisory' : 'advisories'})` });
       }
       for (const id of new Set(direct.map((v) => v.id))) fixes.push({ type: 'ignoreAdvisory', id, title: `Ignore advisory ${id}` });
+      // without a lockfile or node_modules the installed version is only the lowest one the range allows
+      const guessed = r.installedFrom?.get(e.name) === 'floor';
+      const count = `${direct.length} known ${direct.length === 1 ? 'vulnerability' : 'vulnerabilities'}`;
       out.push({
         kind: 'vuln',
         entry: e,
         level: diagLevel(worst.severity),
         code: worst.id,
         url: worst.url,
-        message: `${e.name}@${installed ?? '?'} has ${direct.length} known ${direct.length === 1 ? 'vulnerability' : 'vulnerabilities'} (${breakdown(direct)})` +
+        message: (guessed ? `${e.name}@${installed ?? '?'} may be vulnerable (version guessed from ${e.range}): ${count}` : `${e.name}@${installed ?? '?'} has ${count}`) + ` (${breakdown(direct)})` +
           (need ? `. Fixed in ${need}.` : '. No fixed version known.') + '\n' + advisoryLines(direct),
         inline: target ? `⚠ ${direct.length} vuln${direct.length === 1 ? '' : 's'} → ${prefix + target}` : `⚠ ${direct.length} vuln${direct.length === 1 ? '' : 's'}`,
         fixes,
@@ -89,7 +96,11 @@ export function buildFindings(r: ScanResult, s: Settings): Finding[] {
       const need = maxFixed(vs);
       const p = hs[0].path;
       const fixes: Fix[] = [];
-      if (need) {
+      // A Pin forces every copy of the package. It is not offered when that would drag a copy in another major along, or when the
+      // package is also declared directly (npm refuses an override that disagrees with a direct dependency; fix that line instead).
+      const others = (r.copies?.get(worst.pkg) ?? []).filter((v) => v !== worst.version);
+      const pinnable = !!need && !r.entries.some((x) => x.name === worst.pkg) && !others.some((v) => major(v) !== major(need));
+      if (need && pinnable) {
         const range = `^${need}`;
         fixes.push({
           type: 'addOverride',
@@ -108,13 +119,13 @@ export function buildFindings(r: ScanResult, s: Settings): Finding[] {
         url: worst.url,
         message: `Transitive: ${worst.pkg}@${worst.version || '?'} (via ${p.join(' › ')}) has ${vs.length} known ${vs.length === 1 ? 'vulnerability' : 'vulnerabilities'} (${breakdown(vs)})` +
           (need ? `. Fixed in ${need}.` : '.') + '\n' + advisoryLines(vs),
-        inline: `⚠ ${worst.pkg} ${vs.length} vuln${vs.length === 1 ? '' : 's'}${need ? ` → ^${need}` : ''}`,
+        inline: `⚠ ${worst.pkg} ${vs.length} vuln${vs.length === 1 ? '' : 's'}${pinnable ? ` → ^${need}` : ''}`,
         fixes,
       });
     }
 
     // --- node_modules / lockfile out of step with the declared range
-    if (s.checkSync && !s.ignoredPackages.includes(e.name) && !SKIP_RANGE.test(e.range)) {
+    if (s.checkSync && !s.ignoredPackages.includes(e.name) && !SKIP_RANGE.test(e.range) && !isTagRange(e.range)) {
       const disk = r.onDisk?.get(e.name);
       const from = r.installedFrom?.get(e.name);
       const locked = from === 'lock' ? installed : undefined;

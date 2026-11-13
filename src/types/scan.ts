@@ -26,6 +26,8 @@ export interface ScanResult {
   /** a node_modules folder exists next to package.json or in a parent */
   hasNodeModules?: boolean;
   hits: Hit[];
+  /** every version of each package found in the lockfile graph, to tell whether a Pin would hit several copies */
+  copies?: Map<string, string[]>;
   info: Map<string, RegistryInfo>;
   lock: Graph['kind'];
   pm: PackageManager;

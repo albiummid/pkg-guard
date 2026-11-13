@@ -83,7 +83,7 @@ const methods: Record<string, (p: Params) => unknown | Promise<unknown>> = {
   changelog: doChangelog,
   repoUrl: doRepoUrl,
   rangeEdits: (p) => rangeEdits(p.text, p.updates as RangeUpdate[]),
-  fixEffect: (p) => fixEffect(p.text, p.entry as DepEntry, p.fix as Fix),
+  fixEffect: (p) => fixEffect(p.text, p.entry as DepEntry, p.fix as Fix, p.pkgFile),
   importFindings: (p) => importFindings(p.text, p.manifests as ManifestFindings[]),
   clearCache: () => {
     clearOsvCache();
