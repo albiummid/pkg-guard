@@ -307,6 +307,22 @@ test('a pin is not offered when the package is also a direct dependency the pin 
   assert.ok(!f.fixes.some((x) => x.type === 'addOverride'));
 });
 
+test('a pin is not offered when the root manifest it is written to declares the package', async () => {
+  const root = tmp();
+  fs.writeFileSync(path.join(root, 'yarn.lock'), '# yarn lockfile v1\n');
+  fs.writeFileSync(path.join(root, 'package.json'), '{\n  "name": "root",\n  "dependencies": { "qs": "^5.0.0" }\n}\n');
+  const member = path.join(root, 'packages', 'api');
+  fs.mkdirSync(member, { recursive: true });
+  const scanned = await scan(TRANSITIVE_PKG, path.join(member, 'package.json'), offline);
+  assert.ok(scanned.rootDeclared?.has('qs'));
+  assert.ok(!scanned.rootDeclared?.has('express'));
+  const f = buildFindings(transitive({ qs: ['6.0.0'] }, { rootDeclared: scanned.rootDeclared }), settings).find((x) => x.kind === 'transitive')!;
+  assert.ok(!f.fixes.some((x) => x.type === 'addOverride'));
+  // the same finding without a declaring root still offers the pin
+  const free = buildFindings(transitive({ qs: ['6.0.0'] }), settings).find((x) => x.kind === 'transitive')!;
+  assert.ok(free.fixes.some((x) => x.type === 'addOverride'));
+});
+
 // ---------------------------------------------------------------- manifest parsing and editing
 
 test('dependencies are located in compact, single-line and unusually laid-out manifests', () => {

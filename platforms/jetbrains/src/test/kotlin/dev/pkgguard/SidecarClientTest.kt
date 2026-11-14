@@ -120,6 +120,8 @@ class SidecarClientTest {
             fail("the request sent to the replaced process must fail")
         } catch (e: Exception) {
             assertTrue(e.toString(), e.toString().contains("restarted"))
+            // callers tell an intended restart from a failed scan by its type
+            assertTrue(e.toString(), generateSequence<Throwable>(e) { it.cause }.any { it is ScannerRestartedException })
         }
 
         val fresh = async { c.call<String>("fresh") }

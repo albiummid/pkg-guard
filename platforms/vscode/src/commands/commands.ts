@@ -263,16 +263,17 @@ async function fixVulns(uri: vscode.Uri): Promise<void> {
     ...[...pins.values()].map((p) => `• pin ${p.name} ${p.range} (${p.section})`),
   ];
   const ok = 'Fix';
+  // yarn resolutions / npm overrides only count in the workspace root's package.json. Check it before changing anything,
+  // so a root with unsaved changes cannot leave the fix half applied.
+  const pinFile = pins.size ? pinTarget(uri.fsPath) : undefined;
+  const pinUri = pinFile ? vscode.Uri.file(pinFile) : uri;
+  const pinDoc = pins.size ? await openDoc(pinUri) : undefined;
+  if (pinFile && pinDoc?.isDirty) return void vscode.window.showWarningMessage(`Save ${vscode.workspace.asRelativePath(pinUri)} first: the pins are written there.`);
   const pick = await vscode.window.showWarningMessage(`Fix ${lines.length} vulnerable packages?`, { modal: true, detail: lines.join('\n') }, ok);
   if (pick !== ok) return;
   const doc = updates.size ? await setRanges(uri, [...updates.values()]) : await openDoc(uri);
   if (!doc) return;
-  if (pins.size) {
-    // yarn resolutions / npm overrides only count in the workspace root's package.json
-    const pinFile = pinTarget(uri.fsPath);
-    const pinUri = pinFile ? vscode.Uri.file(pinFile) : uri;
-    const pinDoc = await openDoc(pinUri);
-    if (pinFile && pinDoc.isDirty) return void vscode.window.showWarningMessage(`Save ${vscode.workspace.asRelativePath(pinUri)} first: the pins are written there.`);
+  if (pinDoc) {
     let text = pinDoc.getText();
     for (const p of pins.values()) text = addToSection(text, p.section, p.name, p.range);
     await replaceWhole(pinUri, text);

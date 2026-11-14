@@ -1,5 +1,6 @@
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
+import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
 plugins {
     id("java")
@@ -27,7 +28,16 @@ dependencies {
     testImplementation(files(junit4Jar))
 }
 
-kotlin { jvmToolchain(providers.gradleProperty("pkgguard.jvm").get().toInt()) }
+kotlin {
+    jvmToolchain(providers.gradleProperty("pkgguard.jvm").get().toInt())
+    compilerOptions {
+        // The plugin ships no Kotlin standard library of its own; it uses the one in the IDE. IDE 242, the oldest supported build,
+        // bundles 1.9.24, so the code may only call standard library functions that exist there (a newer one would fail at runtime
+        // with NoSuchMethodError, which the plugin verifier does not see). The language level can be newer: it needs no library.
+        apiVersion.set(KotlinVersion.KOTLIN_1_9)
+        languageVersion.set(KotlinVersion.KOTLIN_2_0)
+    }
+}
 
 // The Node sidecar and the change notes come from the root CLI.
 val isWindows = System.getProperty("os.name").lowercase().contains("win")

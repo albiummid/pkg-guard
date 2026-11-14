@@ -10,6 +10,7 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
@@ -53,6 +54,7 @@ class PkgGuardService(private val project: Project) : Disposable {
         },
         checkCanceled = { ProgressManager.checkCanceled() },
         isCancellation = { it is ProcessCanceledException },
+        isBenign = { it is ScannerRestartedException }, // applying settings restarts the scanner and then refreshes everything
     )
 
     val states: Map<String, ScanResponse> get() = coordinator.states
@@ -91,15 +93,21 @@ class PkgGuardService(private val project: Project) : Disposable {
                 .sortedBy { it.path }
         }.inSmartMode(project).expireWith(this).executeSynchronously()
 
+    /** Cancelled when the service is disposed, which interrupts a refresh that is waiting on the scanner. */
+    private val lifetime = EmptyProgressIndicator()
+
     /** Re-scans every package.json of the project in the background, then re-runs the inspections. */
     fun refreshAll(clearCaches: Boolean) {
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
-                if (clearCaches) sidecar.call<Boolean>("clearCache")
-                for (file in findProjects()) {
-                    if (project.isDisposed) break
-                    coordinator.scan(file.path, textOf(file), force = true)
-                }
+                // runs under an indicator tied to this service, so the waits in the scanner client can be cancelled
+                ProgressManager.getInstance().runProcess({
+                    if (clearCaches) sidecar.call<Boolean>("clearCache")
+                    for (file in findProjects()) {
+                        if (project.isDisposed) break
+                        coordinator.scan(file.path, textOf(file), force = true)
+                    }
+                }, lifetime)
             } catch (e: ProcessCanceledException) {
                 // the project closed or the service was disposed while waiting
             } catch (e: Exception) {
@@ -136,5 +144,5 @@ class PkgGuardService(private val project: Project) : Disposable {
         }, project.disposed)
     }
 
-    override fun dispose() {}
+    override fun dispose() = lifetime.cancel()
 }

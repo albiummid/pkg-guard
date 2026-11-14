@@ -99,7 +99,8 @@ export function buildFindings(r: ScanResult, s: Settings): Finding[] {
       // A Pin forces every copy of the package. It is not offered when that would drag a copy in another major along, or when the
       // package is also declared directly (npm refuses an override that disagrees with a direct dependency; fix that line instead).
       const others = (r.copies?.get(worst.pkg) ?? []).filter((v) => v !== worst.version);
-      const pinnable = !!need && !r.entries.some((x) => x.name === worst.pkg) && !others.some((v) => major(v) !== major(need));
+      const declared = r.entries.some((x) => x.name === worst.pkg) || !!r.rootDeclared?.has(worst.pkg);
+      const pinnable = !!need && !declared && !others.some((v) => major(v) !== major(need));
       if (need && pinnable) {
         const range = `^${need}`;
         fixes.push({

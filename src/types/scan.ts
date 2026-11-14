@@ -28,6 +28,8 @@ export interface ScanResult {
   hits: Hit[];
   /** every version of each package found in the lockfile graph, to tell whether a Pin would hit several copies */
   copies?: Map<string, string[]>;
+  /** Names declared as dependencies by the workspace root manifest a Pin is written to, when that is not the scanned manifest. */
+  rootDeclared?: Set<string>;
   info: Map<string, RegistryInfo>;
   lock: Graph['kind'];
   pm: PackageManager;

@@ -18,6 +18,8 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 - Dist-tag ranges (`next`, `canary`) are no longer reported as out of sync.
 - JetBrains: an install after an Update or Pin saves `package.json` first, so it installs the new versions.
 - JetBrains: one scan per `package.json` (no more cascade of duplicate scans when the tool window opens), an older scan never replaces a newer result, Cancel interrupts a scan, a timeout says which call timed out, applying settings no longer fails running scans, and a scanner error is shown again after it had recovered.
+- JetBrains: a Node.js older than 24 now gets a clear message instead of a scanner that starts and fails; the plugin only calls Kotlin standard library functions that exist in IDE 242 (which bundles Kotlin 1.9), so it cannot fail at runtime on the oldest supported IDE; closing a project cancels its refresh.
+- A Pin is also not offered when the workspace root manifest it is written to declares the package; VS Code "Fix vulnerabilities" checks that root before it changes anything, so it cannot stop half way.
 - JetBrains: "Update to" only offers versions newer than the installed one; Update, Update all and Changelog scan first when the project has not been scanned yet; a change in one project no longer re-scans the others; bun lockfiles and `npm-shrinkwrap.json` are watched.
 - JetBrains: removes the use of the platform APIs deprecated in 2025.2 and 2026.3, builds for Java 21, and CI now runs the plugin verifier (failing on compatibility problems and deprecated API use) against IDE builds 242, 252 and 2026.3.
 - VS Code: workspace settings for the registry, install-after-fix and the audit fallback are ignored in untrusted workspaces; granting trust re-scans.

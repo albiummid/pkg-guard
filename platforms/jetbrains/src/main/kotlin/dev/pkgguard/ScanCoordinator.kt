@@ -23,6 +23,8 @@ class ScanCoordinator(
     private val checkCanceled: () -> Unit = {},
     /** True for the platform's "this operation was cancelled" exception, which is control flow, not a failed scan. */
     private val isCancellation: (Throwable) -> Boolean = { false },
+    /** True for an interruption that is expected and will be followed by another scan (the scanner was restarted): not reported, not stored. */
+    private val isBenign: (Throwable) -> Boolean = { false },
 ) {
     private class Job(val text: String, val forced: Boolean, val seq: Long) {
         val done = CompletableFuture<ScanResponse?>()
@@ -90,7 +92,7 @@ class ScanCoordinator(
                 job.abandoned = true
                 throw e
             }
-            if (reported.compareAndSet(false, true)) onError(e)
+            if (!isBenign(e) && reported.compareAndSet(false, true)) onError(e)
             return null
         } finally {
             synchronized(slot) { if (slot.inflight === job) slot.inflight = null }

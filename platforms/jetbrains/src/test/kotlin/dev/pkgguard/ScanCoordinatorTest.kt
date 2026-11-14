@@ -87,6 +87,22 @@ class ScanCoordinatorTest {
     }
 
     @Test
+    fun `an expected interruption is neither reported nor stored`() {
+        class Restarted : RuntimeException()
+        val errors = CopyOnWriteArrayList<String>()
+        val calls = AtomicInteger()
+        val c = ScanCoordinator(
+            scanner = { _, text -> if (calls.incrementAndGet() == 1) throw Restarted() else response(text) },
+            onError = { errors += it.message.orEmpty() },
+            isBenign = { it is Restarted },
+        )
+        assertNull(c.scan("/p", "v1"))
+        assertTrue("an interruption caused by a restart must not show an error", errors.isEmpty())
+        assertNull(c.states["/p"])
+        assertEquals("v1", c.scan("/p", "v1").tag()) // the follow-up scan after the restart works as usual
+    }
+
+    @Test
     fun `a failed scan is not stored and the next call tries again`() {
         val calls = AtomicInteger()
         val c = ScanCoordinator(scanner = { _, text -> if (calls.incrementAndGet() == 1) error("first fails") else response(text) })

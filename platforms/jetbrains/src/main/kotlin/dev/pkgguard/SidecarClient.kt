@@ -15,6 +15,9 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicLong
 
+/** A request was cut short because the scanner was restarted on purpose (settings changed). Not a failure of the scan itself. */
+class ScannerRestartedException : RuntimeException("The Pkg Guard scanner was restarted")
+
 /**
  * Line-delimited JSON client of the Node scanner: one request per line on its stdin, one reply per line on its stdout.
  * Calls block, so never call them on the EDT.
@@ -43,7 +46,7 @@ class SidecarClient(
         init {
             Thread({
                 process.inputStream.bufferedReader(UTF_8).forEachLine(::onLine)
-                failAll("The Pkg Guard scanner process exited")
+                failAll(RuntimeException("The Pkg Guard scanner process exited"))
             }, "pkg-guard-stdout").apply { isDaemon = true }.start()
             Thread({ process.errorStream.bufferedReader(UTF_8).forEachLine(onStderr) }, "pkg-guard-stderr").apply { isDaemon = true }.start()
         }
@@ -62,9 +65,9 @@ class SidecarClient(
         }
 
         @Synchronized
-        fun failAll(reason: String) {
+        fun failAll(error: RuntimeException) {
             closed = true
-            pending.values.forEach { it.completeExceptionally(RuntimeException(reason)) }
+            pending.values.forEach { it.completeExceptionally(error) }
             pending.clear()
         }
 
@@ -126,7 +129,7 @@ class SidecarClient(
             } catch (e: TimeoutException) {
                 continue
             } catch (e: ExecutionException) {
-                throw RuntimeException(e.cause?.message ?: e.message, e.cause)
+                throw e.cause as? ScannerRestartedException ?: RuntimeException(e.cause?.message ?: e.message, e.cause)
             }
         }
     }
@@ -138,7 +141,7 @@ class SidecarClient(
     fun restart() {
         current?.let {
             it.process.destroy()
-            it.failAll("The Pkg Guard scanner was restarted")
+            it.failAll(ScannerRestartedException())
         }
         current = null
     }

@@ -87,6 +87,18 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
   }
   const dir = path.dirname(pkgFile);
   result.pm = detectPm(dir, pkg);
+  // A Pin goes to the workspace root manifest, so what that manifest declares decides whether a Pin is safe.
+  if (result.pm.root) {
+    const rootManifest = path.join(result.pm.root, 'package.json');
+    if (path.resolve(rootManifest) !== path.resolve(pkgFile)) {
+      try {
+        const root = JSON.parse(await fs.promises.readFile(rootManifest, 'utf8'));
+        result.rootDeclared = new Set([root.dependencies, root.devDependencies, root.optionalDependencies].flatMap((s) => Object.keys(s ?? {})));
+      } catch {
+        /* no readable root manifest: nothing extra to protect */
+      }
+    }
+  }
   const rootDeps: Record<string, string> = {
     ...pkg.optionalDependencies,
     ...pkg.devDependencies,

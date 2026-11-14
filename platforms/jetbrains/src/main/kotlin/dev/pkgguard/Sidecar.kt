@@ -1,6 +1,7 @@
 package dev.pkgguard
 
 import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.process.CapturingProcessHandler
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.components.Service
@@ -61,11 +62,32 @@ class Sidecar(private val project: Project) : Disposable {
 
     private fun launch(): Process {
         val node = project.service<PkgGuardSettings>().state.nodePath.ifBlank { "node" }
+        val major = try {
+            nodeMajorVersion(node)
+        } catch (e: Exception) {
+            throw IllegalStateException("Could not start Node.js (\"$node\"). Install Node $MIN_NODE_MAJOR+ or set its path in Settings | Tools | Pkg Guard. ${e.message}", e)
+        }
+        // An old Node starts and then fails on syntax or APIs of the bundled scanner, which reads as a crash. Say what is wrong instead.
+        if (major < MIN_NODE_MAJOR) {
+            throw IllegalStateException("Pkg Guard needs Node.js $MIN_NODE_MAJOR or newer, but \"$node\" is version $major. Install a newer Node or set its path in Settings | Tools | Pkg Guard.")
+        }
         return try {
             GeneralCommandLine(node, ScannerScript.path().toString()).withCharset(UTF_8).createProcess()
         } catch (e: Exception) {
-            throw IllegalStateException("Could not start Node.js (\"$node\"). Install Node 24+ or set its path in Settings | Tools | Pkg Guard. ${e.message}", e)
+            throw IllegalStateException("Could not start Node.js (\"$node\"). Install Node $MIN_NODE_MAJOR+ or set its path in Settings | Tools | Pkg Guard. ${e.message}", e)
         }
+    }
+
+    /** Major version printed by `<node> --version` ("v24.1.0" gives 24). Throws when the command cannot run or prints something else. */
+    private fun nodeMajorVersion(node: String): Int {
+        val out = CapturingProcessHandler(GeneralCommandLine(node, "--version").withCharset(UTF_8)).runProcess(10_000)
+        val major = Regex("""v?(\d+)\.""").find(out.stdout)?.groupValues?.get(1)?.toIntOrNull()
+        check(out.exitCode == 0 && major != null) { "\"$node --version\" did not print a version (exit ${out.exitCode}): ${out.stderr.trim().take(200)}" }
+        return major
+    }
+
+    private companion object {
+        const val MIN_NODE_MAJOR = 24
     }
 
     inline fun <reified T> call(method: String, params: Any = emptyMap<String, Any>(), timeoutSec: Long = 120): T = client.call(method, params, timeoutSec)
