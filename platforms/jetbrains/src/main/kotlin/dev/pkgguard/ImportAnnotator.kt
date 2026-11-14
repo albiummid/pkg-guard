@@ -53,7 +53,10 @@ class ImportAnnotator : ExternalAnnotator<ImportAnnotator.Input, List<ImportFind
             if (f.ref.line >= doc.lineCount) continue
             val lineStart = doc.getLineStartOffset(f.ref.line)
             if (lineStart + f.ref.end > doc.getLineEndOffset(f.ref.line)) continue
-            holder.newAnnotation(severityOf(f.level), f.message).range(TextRange(lineStart + f.ref.start, lineStart + f.ref.end)).create()
+            var b = holder.newAnnotation(severityOf(f.level), f.message).range(TextRange(lineStart + f.ref.start, lineStart + f.ref.end))
+                .tooltip(advisoryTooltip(f.code, f.message))
+            advisoryLink(f.url)?.let { b = b.withFix(OpenAdvisoryIntention(f.code, it)) }
+            b.create()
         }
     }
 }

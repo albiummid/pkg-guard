@@ -36,6 +36,7 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 
 - Import warnings: vulnerable dependencies are flagged on their `import` / `require` lines in JS and TS files (end-of-line text, hover and Problems in VS Code; inspections in JetBrains). Toggle with `pkgGuard.importWarnings` or the JetBrains settings page.
 - JetBrains: end-of-line hints like VS Code (`⚠ 3 vulns → 4.18.1`) on package.json dependency lines and import lines.
+- JetBrains: vulnerability findings and import warnings offer an "Open advisory" action (Alt+Enter) that opens the advisory page (http and https links only), and their tooltip names the advisory id.
 
 ## [0.1.3] - 2026-10-28
 
