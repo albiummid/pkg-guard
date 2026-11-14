@@ -190,7 +190,11 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                     act("Copy package name") { com.intellij.openapi.ide.CopyPasteManager.getInstance().setContents(StringSelection(node.entry.name)) },
                 )
             }
-            is VersionNode -> listOf(act("Update to ${node.version}") { UpdateFlow.update(project, node.file, node.entry, node.version) })
+            is VersionNode -> listOf(
+                act("Update to ${node.version}") { UpdateFlow.update(project, node.file, node.entry, node.version) },
+                act("Changelog: installed to this") { UpdateFlow.versionChangelog(project, node.file, node.entry, node.version, thisOnly = false) },
+                act("Changelog: this version only") { UpdateFlow.versionChangelog(project, node.file, node.entry, node.version, thisOnly = true) },
+            )
             is ScriptNode -> listOf(act("Run script") {
                 val pm = svc.states[node.file.path]?.pm?.name ?: "npm"
                 Installer.runScript(project, node.file.parent.path, pm, node.name)

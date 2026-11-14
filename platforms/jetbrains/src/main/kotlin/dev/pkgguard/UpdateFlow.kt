@@ -172,10 +172,24 @@ object UpdateFlow {
         val all = "Everything since $installed (up to ${newer.first()})"
         val pick = Messages.showEditableChooseDialog("Changelog of ${dep.name} (installed $installed)", "Pkg Guard", null, (listOf(all) + newer).toTypedArray(), all, null) ?: return
         val (from, to) = if (pick == all) installed to newer.first() else (newer.getOrNull(newer.indexOf(pick) + 1) ?: installed) to pick
+        showNotes(project, dep, from, to, "${dep.name} $from → $to")
+    }
+
+    /** Version-level changelog from a version node: installed to it, or just that release. */
+    fun versionChangelog(project: Project, file: VirtualFile, dep: Entry, version: String, thisOnly: Boolean) {
+        val st = scanned(project, file) ?: return
+        val installed = st.installed[dep.name] ?: return openRepo(project, dep)
+        val r = versionNotes(dep.name, installed, st.newer[dep.name].orEmpty(), version, thisOnly)
+        showNotes(project, dep, r.from, r.to, r.title)
+    }
+
+    /** Release notes of (from, to] in the changelog viewer, with their source; a package with no repository opens its npm page. */
+    private fun showNotes(project: Project, dep: Entry, from: String, to: String, title: String) {
+        val svc = project.service<PkgGuardService>()
         val res = withModalProgress(project, "Fetching ${dep.name} release notes…") {
-            svc.sidecar.call<ChangelogResponse>("changelog", mapOf("name" to dep.name, "from" to from, "to" to to, "registry" to registry))
+            svc.sidecar.call<ChangelogResponse>("changelog", mapOf("name" to dep.name, "from" to from, "to" to to, "registry" to svc.settings.state.registry))
         } ?: return
-        if (res.markdown != null) showText(project, "${dep.name} $from → $to", "Source: ${res.source}\n\n${res.markdown}")
+        if (res.markdown != null) showText(project, title, "Source: ${res.source}\n\n${res.markdown}")
         else res.url?.let { BrowserUtil.browse(it) }
     }
 

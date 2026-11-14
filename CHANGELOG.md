@@ -8,6 +8,7 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 
 ### New Feature
 
+- JetBrains: a version under a dependency offers "Changelog: installed to this" and "Changelog: this version only", opening the release notes in the changelog viewer with their source named (the npm page when the package has no repository).
 - JetBrains: the tool window shows each project's scan notes (unsupported lockfile, dependencies not checked, audit fallback) under an expandable "Notes (n)" entry with the data source of the last scan; a failed vulnerability check is shown in red.
 
 ### Fixes
