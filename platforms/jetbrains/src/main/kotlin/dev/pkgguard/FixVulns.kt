@@ -22,12 +22,15 @@ class FixPlan(val updates: List<RangeUpdate>, val pins: List<PinParams>) {
     }
 
     companion object {
+        /** The operators the core writes in front of a fixed version (prefixOf); rangeEdits puts the manifest's own operator back, so a >= range keeps it. */
+        private val OPERATOR = Regex("^(\\^|~|>=)")
+
         fun of(findings: List<Finding>): FixPlan {
             val updates = LinkedHashMap<Pair<String, String>, RangeUpdate>() // a package declared in two sections is updated in both
             val pins = LinkedHashMap<String, PinParams>()
             for (f in findings) for (fx in f.fixes) {
                 if (fx.type == "setVersion" && f.kind == "vuln" && fx.range != null) {
-                    updates[f.entry.section to f.entry.name] = RangeUpdate(f.entry.name, fx.range.trimStart('^', '~', '>', '='), f.entry.section)
+                    updates[f.entry.section to f.entry.name] = RangeUpdate(f.entry.name, fx.range.replace(OPERATOR, ""), f.entry.section)
                 }
                 if (fx.type == "addOverride" && f.kind == "transitive" && fx.name != null && fx.range != null && fx.section != null) {
                     pins[fx.name] = PinParams(fx.section, fx.name, fx.range)
@@ -42,7 +45,9 @@ class FixPlan(val updates: List<RangeUpdate>, val pins: List<PinParams>) {
 object FixVulns {
     fun run(project: Project, file: VirtualFile) {
         val svc = project.service<PkgGuardService>()
-        val st = svc.states[file.path] ?: withModalProgress(project, "Scanning ${file.name}…") { svc.scan(file) } ?: return
+        // planned against the editor's current text, not a cached scan of older text (its edits would hit moved lines);
+        // the scanner reuses the stored result when the text is unchanged
+        val st = withModalProgress(project, "Scanning ${file.name}…") { svc.scan(file) } ?: return
         val plan = FixPlan.of(st.findings)
         if (plan.isEmpty) return notify(project, "No fixable vulnerabilities found.")
 

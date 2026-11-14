@@ -34,6 +34,18 @@ class ScanCoordinatorTest {
     }
 
     @Test
+    fun `results of a manifest that no longer exists are dropped`() {
+        val calls = AtomicInteger()
+        val c = ScanCoordinator(scanner = { _, text -> response("$text#${calls.incrementAndGet()}") })
+        c.scan("/a/package.json", "v1")
+        c.scan("/b/package.json", "v1")
+        assertTrue(c.retainOnly(listOf("/a/package.json")))
+        assertEquals(setOf("/a/package.json"), c.states.keys)
+        assertTrue(!c.retainOnly(listOf("/a/package.json")))
+        assertEquals("v1#3", c.scan("/b/package.json", "v1").tag()) // a re-created manifest is scanned afresh
+    }
+
+    @Test
     fun `unchanged text reuses the stored result and a forced scan asks again`() {
         val calls = AtomicInteger()
         val c = ScanCoordinator(scanner = { _, text -> response("$text#${calls.incrementAndGet()}") })
