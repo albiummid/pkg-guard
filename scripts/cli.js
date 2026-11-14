@@ -65,11 +65,11 @@ function editVersionFiles(args) {
   const targets = [
     ['package.json', (text) => editJson(text, (value) => {
       value.version = config.version;
-      value.devDependencies['@types/vscode'] = config['vscode.types'];
     })],
     ['platforms/vscode/package.json', (text) => editJson(text, (value) => {
       value.version = config.version;
       value.engines.vscode = `^${config['vscode.engine']}`;
+      value.devDependencies = { ...value.devDependencies, '@types/vscode': config['vscode.types'] };
     })],
     ['platforms/jetbrains/gradle.properties', (text) => {
       const props = {

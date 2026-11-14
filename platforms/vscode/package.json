@@ -586,6 +586,9 @@
       }
     }
   },
+  "devDependencies": {
+    "@types/vscode": "1.125.0"
+  },
   "scripts": {
     "typecheck": "tsc -p . --noEmit",
     "compile": "esbuild src/extension.ts --bundle --platform=node --target=node24 --external:vscode --sourcemap --outfile=dist/extension.js",
