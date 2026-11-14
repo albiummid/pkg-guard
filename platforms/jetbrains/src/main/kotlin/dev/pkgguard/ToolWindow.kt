@@ -39,6 +39,8 @@ private data class ProjectNode(val file: VirtualFile) : Node
 private data class SectionNode(val title: String) : Node
 private data class DepNode(val file: VirtualFile, val entry: Entry) : Node
 private data class VersionNode(val file: VirtualFile, val entry: Entry, val version: String) : Node
+private data class NotesNode(val title: String) : Node
+private data class NoteNode(val text: String) : Node
 private data class ScriptNode(val file: VirtualFile, val name: String, val command: String) : Node
 
 class PkgGuardToolWindowFactory : ToolWindowFactory, DumbAware {
@@ -127,6 +129,7 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                         }
                         p.add(s)
                     }
+                    if (st.notes.isNotEmpty()) p.add(DefaultMutableTreeNode(NotesNode("Notes (${st.notes.size}) · source: ${sourceLabel(st.source)}")).also { n -> st.notes.forEach { n.add(DefaultMutableTreeNode(NoteNode(it))) } })
                     val sc = scripts[f].orEmpty()
                     if (sc.isNotEmpty()) p.add(DefaultMutableTreeNode(SectionNode("scripts (${sc.size})")).also { s -> sc.forEach { (n, c) -> s.add(DefaultMutableTreeNode(ScriptNode(f, n, c))) } })
                     root.add(p)
@@ -192,7 +195,7 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                 val pm = svc.states[node.file.path]?.pm?.name ?: "npm"
                 Installer.runScript(project, node.file.parent.path, pm, node.name)
             })
-            is SectionNode -> emptyList()
+            is SectionNode, is NotesNode, is NoteNode -> emptyList()
         }
     }
 
@@ -209,6 +212,14 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                     if (vulns > 0) append("  $vulns vulnerable", SimpleTextAttributes.ERROR_ATTRIBUTES)
                 }
                 is SectionNode -> append(n.title, SimpleTextAttributes.GRAYED_BOLD_ATTRIBUTES)
+                is NotesNode -> {
+                    icon = AllIcons.General.Information
+                    append(n.title, SimpleTextAttributes.GRAYED_BOLD_ATTRIBUTES)
+                }
+                is NoteNode -> if (isCheckFailure(n.text)) {
+                    icon = AllIcons.General.Error
+                    append(n.text, SimpleTextAttributes.ERROR_ATTRIBUTES)
+                } else append(n.text, SimpleTextAttributes.GRAYED_ATTRIBUTES)
                 is DepNode -> {
                     val st = svc.states[n.file.path]
                     val findings = st?.findings?.filter { it.entry.name == n.entry.name && it.entry.section == n.entry.section }.orEmpty()
