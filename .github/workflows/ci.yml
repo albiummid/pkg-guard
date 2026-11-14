@@ -74,9 +74,11 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
       - uses: gradle/actions/setup-gradle@v4
-      - run: bash ./gradlew buildPlugin --no-daemon
+      # test: the scanner client and scan coordinator; verifyPlugin: fails on compatibility problems and deprecated API use
+      # across the oldest supported IDE, 2025.2 and the newest release.
+      - run: bash ./gradlew test buildPlugin verifyPlugin --no-daemon
         working-directory: platforms/jetbrains
       - uses: actions/upload-artifact@v4
         with:

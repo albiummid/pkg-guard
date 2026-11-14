@@ -1,9 +1,10 @@
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "2.0.21"
-    id("org.jetbrains.intellij.platform") version "2.2.1"
+    id("org.jetbrains.intellij.platform") version "2.10.5"
 }
 
 group = "dev.pkgguard"
@@ -56,12 +57,21 @@ intellijPlatform {
         password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
     }
     publishing { token = providers.environmentVariable("PUBLISH_TOKEN") }
-    // Oldest supported IDE and the last standalone IDEA Community release (2025.3+ ships as unified IntelliJ IDEA,
-    // which this Gradle plugin version cannot resolve, so `recommended()` fails).
+    // The plugin has no upper build limit, so the newest release is verified too: the oldest supported IDE, the last standalone
+    // IDEA Community (2025.2) and the newest unified IntelliJ IDEA. Raise the last one when a new IDE is released.
     pluginVerification {
+        // Deprecated or internal API usage and compatibility problems fail the build instead of only being reported.
+        failureLevel = listOf(
+            VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
+            VerifyPluginTask.FailureLevel.DEPRECATED_API_USAGES,
+            VerifyPluginTask.FailureLevel.INTERNAL_API_USAGES,
+            VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
+            VerifyPluginTask.FailureLevel.MISSING_DEPENDENCIES,
+        )
         ides {
-            ide(IntelliJPlatformType.IntellijIdeaCommunity, providers.gradleProperty("pkgguard.ideaVersion").get())
-            ide(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.4")
+            create(IntelliJPlatformType.IntellijIdeaCommunity, providers.gradleProperty("pkgguard.ideaVersion").get())
+            create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.4")
+            create(IntelliJPlatformType.IntellijIdea, "2026.3")
         }
     }
 }

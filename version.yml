@@ -11,4 +11,4 @@ node:
 jetbrains:
   sinceBuild: 242     # oldest supported IDE build
   ideaVersion: 2024.2.5   # IDE the plugin is compiled against
-  jvm: 17
+  jvm: 21

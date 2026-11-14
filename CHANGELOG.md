@@ -6,6 +6,24 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 
 ## [Unreleased]
 
+### Fixes
+
+- A failed `npm audit` / `yarn audit` fallback (offline, an error report, the old npm 6 format) is now reported as a failed check instead of "no vulnerabilities".
+- npm workspace members are checked against their own nested copy of a package, not the root's.
+- Packages installed under an npm alias are looked up under their real name; peer dependencies npm installed are followed.
+- Advisories without a severity rating (and malware records) are no longer hidden by `minSeverity`; the severity is read from the CVSS score when there is no rating. Advisories can be ignored by any of their ids, including the CVE id.
+- A failed advisory lookup is retried by the next scan instead of being remembered as "unknown severity, no fix"; concurrent scans share OSV and registry requests, and result pages are followed.
+- Compact or one-line `dependencies` sections are found; dependencies that cannot be located, have no known version, or sit in a lockfile that is not supported (pnpm, bun) now produce a scan note.
+- A Pin is written to the workspace root's `package.json`, keeps the file's formatting and an existing nested npm override, and is not offered when it would force several majors of a package or when the package is also a direct dependency. A `>=` range keeps its operator when updated; an update's title counts only the advisories it fixes.
+- Dist-tag ranges (`next`, `canary`) are no longer reported as out of sync.
+- JetBrains: an install after an Update or Pin saves `package.json` first, so it installs the new versions.
+- JetBrains: one scan per `package.json` (no more cascade of duplicate scans when the tool window opens), an older scan never replaces a newer result, Cancel interrupts a scan, a timeout says which call timed out, applying settings no longer fails running scans, and a scanner error is shown again after it had recovered.
+- JetBrains: "Update to" only offers versions newer than the installed one; Update, Update all and Changelog scan first when the project has not been scanned yet; a change in one project no longer re-scans the others; bun lockfiles and `npm-shrinkwrap.json` are watched.
+- JetBrains: removes the use of the platform APIs deprecated in 2025.2 and 2026.3, builds for Java 21, and CI now runs the plugin verifier (failing on compatibility problems and deprecated API use) against IDE builds 242, 252 and 2026.3.
+- VS Code: workspace settings for the registry, install-after-fix and the audit fallback are ignored in untrusted workspaces; granting trust re-scans.
+- VS Code: fix titles are escaped in the hover, a hover link applies the Fix it shows even after a re-scan, a Fix is refused when the line changed since the scan, scripts run as a quoted task, installs use the terminal's working directory, and only web links from registry data are opened.
+- VS Code: only real `package.json` files on disk are scanned (not diff views), a closed file no longer gets its diagnostics back, a newer scan result is never replaced by an older one, "Re-scan" fetches fresh data, and the welcome view shows when there is no `package.json`.
+
 ### Improvements
 
 - Re-scan every project periodically (every 6 hours by default) with fresh advisory data, so new vulnerabilities show up in an editor left open. Set `pkgGuard.refreshIntervalHours` (or the JetBrains setting) to change it, or 0 to turn it off.

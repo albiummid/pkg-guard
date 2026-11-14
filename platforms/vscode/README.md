@@ -7,7 +7,7 @@ Vulnerability warnings and update suggestions right inside `package.json`, inclu
 ## Features
 
 - **Inline hints** at the end of each dependency line: `⚠ 3 vulns → 4.18.1`, `↑ 11.2.8`, `⇡ 12.2.0 major`. Hover for advisory details and fixes.
-- **Squiggles** in the Problems panel: red for high/critical, yellow for moderate, blue for info.
+- **Squiggles** in the Problems panel: red for high/critical, yellow for moderate, blue for info. A vulnerability in a transitive dependency is shown as a warning at most.
 - **Quick fixes** (lightbulb or `Ctrl+.`): update to the fixed version, pin a transitive package via `resolutions` (yarn) or `overrides` (npm), ignore an advisory, stop suggesting updates for a package.
 - **Transitive vulnerabilities** from `yarn.lock` (v1) or `package-lock.json` (v2/3), shown on the direct dependency that pulls them in, with the path (`@nestjs/platform-express › express › body-parser`).
 - **Import warnings** in JS / TS files: a vulnerable package is flagged on every `import` / `require` of it, with the same end-of-line hint, hover and Problems entry. The nearest `package.json` that declares the package is used (workspace before root).
@@ -21,7 +21,7 @@ Open **Pkg Guard** in the activity bar.
 
 Every `package.json` in the workspace (monorepos included) appears as a project:
 
-- **Scripts**: ▶ runs `npm|yarn|pnpm|bun run <script>` in a terminal.
+- **Scripts**: ▶ runs `npm|yarn|pnpm|bun run <script>` as a task (trusted workspaces only).
 - **Needs attention**: only the vulnerable or outdated dependencies.
 - **dependencies / devDependencies / optionalDependencies** with installed version and fix hints.
 - **Project actions**: install all, update all within the current major, add dependency, re-scan.
@@ -58,9 +58,9 @@ Dependents are checked among your direct dependencies, using their installed `no
 
 ## Notes
 
-- Advisories come from [OSV.dev](https://osv.dev) (falls back to `yarn audit` / `npm audit` when offline). Versions come from the npm registry.
+- Advisories come from [OSV.dev](https://osv.dev) (when OSV.dev is unreachable it falls back to `yarn audit` / `npm audit`, which need the network too, a `yarn.lock` v1 or `package-lock.json`, and a trusted workspace; if that fails as well the output channel says the check failed). Versions come from the npm registry.
 - Fixes only edit `package.json`. Run your package manager afterwards to update the lockfile.
-- Not supported yet: yarn berry / pnpm lockfiles (direct dependencies are still checked using `node_modules` or the declared range), single-line dependency sections, workspaces `catalog:` ranges.
+- Not supported yet: yarn berry / pnpm lockfiles (direct dependencies are still checked using `node_modules` or the declared range), bun lockfiles, a dependency whose name and version are on different lines, workspaces `catalog:` ranges, and private registries that need authentication.
 
 ## Building from source
 
