@@ -8,6 +8,7 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 
 ### New Feature
 
+- JetBrains: each project in the tool window has a "Needs attention (n)" group on top listing the dependencies with a vulnerability, transitive vulnerability, deprecation or out-of-sync install, with the same actions as the dependencies below; it is hidden when nothing needs attention.
 - JetBrains: the tool window shows each project's scan notes (unsupported lockfile, dependencies not checked, audit fallback) under an expandable "Notes (n)" entry with the data source of the last scan; a failed vulnerability check is shown in red.
 - JetBrains: a status bar widget shows how many dependencies are vulnerable and how many updates are available (the tooltip names the data source); clicking it re-scans with fresh advisory and registry data.
 
