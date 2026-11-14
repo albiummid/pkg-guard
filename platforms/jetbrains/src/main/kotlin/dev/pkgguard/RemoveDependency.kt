@@ -18,6 +18,6 @@ object RemoveDependency {
         } ?: return
         if (edits.isEmpty()) return notify(project, "$name is not declared in ${file.name}.", NotificationType.WARNING)
         applyEdits(project, file, edits) // one whole-document replacement, so one undo step
-        svc.states[file.path]?.pm?.let { Installer.offer(project, file, it) } // saves the file before installing
+        Installer.offer(project, file, svc.states[file.path]?.pm) // saves the file first, then offers the install
     }
 }
