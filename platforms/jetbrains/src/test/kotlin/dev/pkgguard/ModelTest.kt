@@ -20,6 +20,13 @@ class ModelTest {
     }
 
     @Test
+    fun `versions reply decodes and the new range is a caret on the latest`() {
+        val v = gson.fromJson("""{"latest":"3.1.0","versions":["3.1.0","3.0.0"]}""", VersionsResponse::class.java)
+        assertEquals("3.1.0", v.latest)
+        assertEquals("^3.1.0", AddDependency.rangeFor(v.latest!!))
+    }
+
+    @Test
     fun `request params serialise with the field names the sidecar reads`() {
         assertEquals("""{"text":"t","section":"dependencies","name":"a","range":"^1.0.0"}""", gson.toJson(AddDependencyParams("t", "dependencies", "a", "^1.0.0")))
         assertEquals("""{"text":"t","name":"a"}""", gson.toJson(RemoveDependencyParams("t", "a")))
