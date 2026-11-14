@@ -9,6 +9,7 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 ### New Feature
 
 - JetBrains: the tool window shows each project's scan notes (unsupported lockfile, dependencies not checked, audit fallback) under an expandable "Notes (n)" entry with the data source of the last scan; a failed vulnerability check is shown in red.
+- JetBrains: a project without a `package.json` shows "No package.json found" and what Pkg Guard needs in the tool window, instead of an empty tree; it never shows while existing manifests are still being scanned.
 
 ### Fixes
 

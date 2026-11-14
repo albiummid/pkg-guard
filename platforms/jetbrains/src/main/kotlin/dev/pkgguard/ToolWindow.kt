@@ -60,6 +60,7 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
     init {
         tree.isRootVisible = false
         tree.cellRenderer = Renderer()
+        tree.emptyText.text = "" // set by rebuild() once the manifests are known, never while they are being scanned
         setContent(ScrollPaneFactory.createScrollPane(tree))
 
         val refresh = object : DumbAwareAction("Refresh", "Re-scan all package.json files", AllIcons.Actions.Refresh) {
@@ -135,6 +136,7 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                     root.add(p)
                 }
                 val expanded = (0 until tree.rowCount).filter { tree.isExpanded(it) }
+                tree.emptyText.text = emptyStateText(files.size)
                 model.setRoot(root)
                 (0 until root.childCount).forEach { tree.expandRow(it) }
                 expanded.forEach { if (it < tree.rowCount) tree.expandRow(it) }
