@@ -9,6 +9,7 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 ### New Feature
 
 - JetBrains: the tool window shows each project's scan notes (unsupported lockfile, dependencies not checked, audit fallback) under an expandable "Notes (n)" entry with the data source of the last scan; a failed vulnerability check is shown in red.
+- JetBrains: a status bar widget shows how many dependencies are vulnerable and how many updates are available (the tooltip names the data source); clicking it re-scans with fresh advisory and registry data.
 
 ### Fixes
 
