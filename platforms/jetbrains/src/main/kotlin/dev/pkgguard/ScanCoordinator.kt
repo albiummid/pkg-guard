@@ -69,6 +69,14 @@ class ScanCoordinator(
         }
     }
 
+    /** Scans every manifest in [paths] once (duplicates ignored), reusing results and scans already there; a failing one does not stop the rest. */
+    fun scanAll(paths: Collection<String>, textOf: (String) -> String) {
+        for (path in paths.distinct()) {
+            checkCanceled()
+            scan(path, textOf(path))
+        }
+    }
+
     private fun run(path: String, slot: Slot, job: Job): ScanResponse? {
         var result: ScanResponse? = null
         try {
