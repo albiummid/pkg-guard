@@ -11,7 +11,11 @@ import java.awt.Component
 import java.awt.event.MouseEvent
 import java.util.concurrent.atomic.AtomicInteger
 
-/** What the status bar shows, counted like the VS Code status bar: vulnerable and Transitive vulnerability Findings, and available Updates. */
+/**
+ * What the status bar shows: vulnerable and Transitive vulnerability Findings, and available Updates, counted the way VS Code counts
+ * them for its open manifest. The JetBrains widget has no "open manifest", so it sums over all of the project's scanned manifests
+ * (the ticket asks for "the project's manifests").
+ */
 class StatusCounts(val vulnerable: Int, val updates: Int, private val sources: List<String>) {
     val text: String get() = "$vulnerable vulnerable · $updates updates"
     val sourceName: String get() = sources.joinToString(", ")
@@ -24,13 +28,7 @@ class StatusCounts(val vulnerable: Int, val updates: Int, private val sources: L
             return StatusCounts(
                 vulnerable = findings.count { it.kind == "vuln" || it.kind == "transitive" },
                 updates = findings.count { it.kind == "outdated" },
-                sources = scans.map { it.source }.distinct().map {
-                    when (it) {
-                        "audit" -> "audit CLI"
-                        "osv" -> "OSV.dev"
-                        else -> "no vulnerability data"
-                    }
-                },
+                sources = scans.map { it.source }.distinct().map(::sourceLabel),
             )
         }
     }
@@ -91,7 +89,7 @@ private class PkgGuardStatusBarWidget(private val project: Project) : StatusBarW
 
     override fun getTooltipText(): String? {
         if (service.states.isEmpty() && !service.activity.busy) return null
-        val source = StatusCounts.of(service.states.values)?.sourceName ?: "no vulnerability data"
+        val source = StatusCounts.of(service.states.values)?.sourceName ?: sourceLabel("none")
         return "Pkg Guard ($source) — click to re-scan"
     }
 

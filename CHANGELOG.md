@@ -17,6 +17,9 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 
 ### Fixes
 
+- JetBrains: "Add dependency…" reports a failed registry lookup (network, registry error) separately from a package that does not exist, and no longer fails on a package that has deprecated versions.
+- JetBrains: after Add dependency, Remove dependency, an Update or a Fix, `package.json` is saved even when no install runs (install setting "never", an untrusted project, or no known package manager).
+- JetBrains: "Fix vulnerabilities" plans against the current editor text, and the status bar stops counting a `package.json` that was deleted.
 - JetBrains: every `package.json` of a project is now scanned in the background once indexing is done, so Findings, the tool window and import warnings are ready without opening anything.
 - A failed `npm audit` / `yarn audit` fallback (offline, an error report, the old npm 6 format) is now reported as a failed check instead of "no vulnerabilities".
 - npm workspace members are checked against their own nested copy of a package, not the root's.

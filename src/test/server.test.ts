@@ -99,3 +99,20 @@ test('server: scriptLocations returns the line of each script', async () => {
   assert.deepEqual((await call('scriptLocations', { text: CRLF })).result, [{ key: 'build', line: 5 }, { key: 'dev', line: 6 }]);
   assert.deepEqual((await call('scriptLocations', { text: TAB })).result, []);
 });
+
+test('server: scriptLocations handles 4-space and odd indentation', async () => {
+  const four = '{\n    "scripts": {\n        "build": "tsc",\n        "dev": "x"\n    }\n}\n';
+  assert.deepEqual((await call('scriptLocations', { text: four })).result, [{ key: 'build', line: 2 }, { key: 'dev', line: 3 }]);
+  const odd = '{\n   "scripts": {\n     "build": "tsc",\n      "dev": "x"\n   }\n}\n';
+  assert.deepEqual((await call('scriptLocations', { text: odd })).result, [{ key: 'build', line: 2 }, { key: 'dev', line: 3 }]);
+});
+
+test('server: pinsEffect writes every pin into the manifest in one whole-document edit', async () => {
+  const text = '{\n  "name": "app"\n}\n';
+  const pins = [{ section: 'overrides', name: 'qs', range: '^6.0.4' }, { section: 'overrides', name: 'ms', range: '^2.1.3' }];
+  const r = await call('pinsEffect', { text, pins });
+  assert.equal(r.result.type, 'edit');
+  assert.equal(r.result.file, undefined); // no pkgFile: the scanned manifest itself
+  assert.equal(r.result.edits.length, 1);
+  assert.deepEqual(JSON.parse(apply(text, r.result.edits[0])).overrides, { ms: '^2.1.3', qs: '^6.0.4' });
+});

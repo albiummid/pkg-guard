@@ -6,6 +6,6 @@ fun isCheckFailure(note: String): Boolean = note.startsWith("vulnerability check
 /** Names the data source of the last scan as the tool window shows it. */
 fun sourceLabel(source: String): String = when (source) {
     "osv" -> "OSV.dev"
-    "audit" -> "audit fallback"
+    "audit" -> "audit CLI"
     else -> "none"
 }

@@ -106,7 +106,9 @@ class PkgGuardService(private val project: Project) : Disposable {
                 // runs under an indicator tied to this service, so the waits in the scanner client can be cancelled
                 ProgressManager.getInstance().runProcess({
                     if (clearCaches) sidecar.call<Boolean>("clearCache")
-                    for (file in findProjects()) {
+                    val files = findProjects()
+                    dropMissing(files)
+                    for (file in files) {
                         if (project.isDisposed) break
                         coordinator.scan(file.path, textOf(file), force = true)
                     }
@@ -121,12 +123,18 @@ class PkgGuardService(private val project: Project) : Disposable {
         }
     }
 
+    /** A deleted or moved package.json must not keep showing counts: forget its results and tell the listeners. */
+    private fun dropMissing(files: Collection<VirtualFile>) {
+        if (coordinator.retainOnly(files.map { it.path }) && !project.isDisposed) project.messageBus.syncPublisher(PKG_GUARD_TOPIC).changed()
+    }
+
     /** Scans every package.json of the project once in the background (after indexing), so results are ready before anything is opened. */
     fun scanAllOnOpen() {
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 ProgressManager.getInstance().runProcess({
                     val byPath = findProjects().associateBy { it.path }
+                    dropMissing(byPath.values)
                     coordinator.scanAll(byPath.keys) { path -> textOf(byPath.getValue(path)) }
                 }, lifetime)
             } catch (e: ProcessCanceledException) {

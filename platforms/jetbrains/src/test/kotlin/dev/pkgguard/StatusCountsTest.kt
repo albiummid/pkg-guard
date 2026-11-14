@@ -39,7 +39,7 @@ class StatusCountsTest {
     fun `tooltip names the data source`() {
         assertEquals("OSV.dev", StatusCounts.of(listOf(scan("osv")))!!.sourceName)
         assertEquals("audit CLI", StatusCounts.of(listOf(scan("audit")))!!.sourceName)
-        assertEquals("no vulnerability data", StatusCounts.of(listOf(scan("none")))!!.sourceName)
+        assertEquals("none", StatusCounts.of(listOf(scan("none")))!!.sourceName)
         assertEquals("OSV.dev, audit CLI", StatusCounts.of(listOf(scan("osv"), scan("audit"), scan("osv")))!!.sourceName)
     }
 

@@ -1,5 +1,12 @@
 import type { Section, DepEntry, TextEdit } from './manifest';
 
+/** One Pin: `name` forced to `range` in the manifest's `section` (resolutions / overrides / pnpm.overrides). */
+export interface PinRequest {
+  section: string;
+  name: string;
+  range: string;
+}
+
 export interface RangeUpdate {
   name: string;
   version: string;
