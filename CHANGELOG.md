@@ -12,6 +12,7 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 
 ### Fixes
 
+- JetBrains: every `package.json` of a project is now scanned in the background once indexing is done, so Findings, the tool window and import warnings are ready without opening anything.
 - A failed `npm audit` / `yarn audit` fallback (offline, an error report, the old npm 6 format) is now reported as a failed check instead of "no vulnerabilities".
 - npm workspace members are checked against their own nested copy of a package, not the root's.
 - Packages installed under an npm alias are looked up under their real name; peer dependencies npm installed are followed.

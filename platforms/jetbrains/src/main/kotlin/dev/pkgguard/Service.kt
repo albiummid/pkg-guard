@@ -118,6 +118,24 @@ class PkgGuardService(private val project: Project) : Disposable {
         }
     }
 
+    /** Scans every package.json of the project once in the background (after indexing), so results are ready before anything is opened. */
+    fun scanAllOnOpen() {
+        ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                ProgressManager.getInstance().runProcess({
+                    val byPath = findProjects().associateBy { it.path }
+                    coordinator.scanAll(byPath.keys) { path -> textOf(byPath.getValue(path)) }
+                }, lifetime)
+            } catch (e: ProcessCanceledException) {
+                // the project closed while waiting
+            } catch (e: Exception) {
+                log.warn("initial scan failed", e)
+            } finally {
+                ApplicationManager.getApplication().invokeLater({ if (!project.isDisposed) DaemonRestart.restart(project) }, project.disposed)
+            }
+        }
+    }
+
     /** Debounced: an install touches many files at once. */
     fun scheduleRefresh() {
         alarm.cancelAllRequests()
