@@ -46,9 +46,13 @@ class PackageJsonAnnotator : ExternalAnnotator<PackageJsonAnnotator.Input, ScanR
             val lineStart = doc.getLineStartOffset(f.entry.line)
             val end = lineStart + f.entry.end
             if (end > doc.textLength) continue
-            val b = holder.newAnnotation(severityOf(f.level), f.message).range(TextRange(lineStart + f.entry.nameStart, end))
-            if (f.kind == "outdated" || f.kind == "stale") b.textAttributes(com.intellij.openapi.editor.DefaultLanguageHighlighterColors.LINE_COMMENT)
-            f.fixes.forEach { b.withFix(ApplyFixIntention(f, it)) }
+            var b = holder.newAnnotation(severityOf(f.level), f.message).range(TextRange(lineStart + f.entry.nameStart, end))
+            if (f.kind == "outdated" || f.kind == "stale") b = b.textAttributes(com.intellij.openapi.editor.DefaultLanguageHighlighterColors.LINE_COMMENT)
+            f.fixes.forEach { b = b.withFix(ApplyFixIntention(f, it)) }
+            if (f.kind == "vuln" || f.kind == "transitive") {
+                b = b.tooltip(advisoryTooltip(f.code, f.message))
+                advisoryLink(f.url)?.let { b = b.withFix(OpenAdvisoryIntention(f.code, it)) }
+            }
             b.create()
         }
     }
