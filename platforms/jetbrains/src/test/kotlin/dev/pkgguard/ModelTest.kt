@@ -15,8 +15,6 @@ class ModelTest {
             object : TypeToken<List<TextEdit>>() {}.type,
         )
         assertEquals(listOf(TextEdit(0, 0, 6, 0, "{\r\n}\r\n")), edits)
-        val keys: List<KeyLoc> = gson.fromJson("""[{"key":"build","line":5}]""", object : TypeToken<List<KeyLoc>>() {}.type)
-        assertEquals(listOf(KeyLoc("build", 5)), keys)
     }
 
     @Test
@@ -27,9 +25,14 @@ class ModelTest {
     }
 
     @Test
+    fun `versions reply with deprecated versions decodes (a map, as the sidecar sends it)`() {
+        val v = gson.fromJson("""{"latest":"3.1.0","versions":["3.1.0","3.0.0"],"deprecated":{"3.0.0":"use 3.1.0"}}""", VersionsResponse::class.java)
+        assertEquals("3.1.0", v.latest)
+        assertEquals(mapOf("3.0.0" to "use 3.1.0"), v.deprecated)
+    }
+
+    @Test
     fun `request params serialise with the field names the sidecar reads`() {
-        assertEquals("""{"text":"t","section":"dependencies","name":"a","range":"^1.0.0"}""", gson.toJson(AddDependencyParams("t", "dependencies", "a", "^1.0.0")))
         assertEquals("""{"text":"t","name":"a"}""", gson.toJson(RemoveDependencyParams("t", "a")))
-        assertEquals("""{"text":"t"}""", gson.toJson(ScriptLocationsParams("t")))
     }
 }

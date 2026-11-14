@@ -86,16 +86,8 @@ data class RepoUrl(val url: String? = null, val npm: String)
 
 data class RangeUpdate(val name: String, val version: String, val section: String? = null)
 
-/** A top-level key of the `scripts` object and its zero-based line (`scriptLocations`). */
-data class KeyLoc(val key: String, val line: Int)
-
-// Params and replies of the manifest-editing methods. `addDependencyEdits` and `removeDependencyEdits` answer List<TextEdit>
-// (one whole-document replacement); `scriptLocations` answers List<KeyLoc>.
-data class AddDependencyParams(val text: String, val section: String, val name: String, val range: String)
-
+// Params of the manifest-editing methods. `addDependencyEdits` and `removeDependencyEdits` answer List<TextEdit> (one whole-document replacement).
 data class RemoveDependencyParams(val text: String, val name: String)
 
-data class ScriptLocationsParams(val text: String)
-
-/** Reply of `versions`: the newest stable version and the newest stable versions, or null when the registry does not know the package. */
-data class VersionsResponse(val latest: String? = null, val versions: List<String> = emptyList(), val deprecated: String? = null)
+/** Reply of `versions`: the newest stable version, the newest stable versions and the deprecated ones (version to message); the call answers null when the registry does not know the package. */
+data class VersionsResponse(val latest: String? = null, val versions: List<String> = emptyList(), val deprecated: Map<String, String>? = null)

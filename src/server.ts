@@ -13,7 +13,7 @@ import { clearRegistryCache, fetchInfo } from './sources/registry';
 import { changelogBetween, fetchMeta, npmUrl } from './sources/changelog';
 import { scan } from './analysis/scan';
 import { compare, isStable } from './versions/semver';
-import { DepEntry, Fix, ManifestFindings, RangeUpdate, Settings } from './types';
+import { DepEntry, Fix, ManifestFindings, PinRequest, RangeUpdate, Settings } from './types';
 
 type Params = Record<string, any>;
 
@@ -94,7 +94,7 @@ const methods: Record<string, (p: Params) => unknown | Promise<unknown>> = {
   removeDependencyEdits: (p) => [replaceAll(p.text, removeDependency(p.text, p.name))],
   scriptLocations: (p) => locateKeys(p.text, 'scripts'),
   fixEffect: (p) => fixEffect(p.text, p.entry as DepEntry, p.fix as Fix, p.pkgFile),
-  pinsEffect: (p) => pinsEffect(p.text, p.pins as { section: string; name: string; range: string }[], p.pkgFile),
+  pinsEffect: (p) => pinsEffect(p.text, p.pins as PinRequest[], p.pkgFile),
   importFindings: (p) => importFindings(p.text, p.manifests as ManifestFindings[]),
   clearCache: () => {
     clearOsvCache();
