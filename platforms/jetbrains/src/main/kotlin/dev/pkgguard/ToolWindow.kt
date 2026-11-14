@@ -36,7 +36,7 @@ import javax.swing.tree.DefaultTreeModel
 
 private sealed interface Node
 private data class ProjectNode(val file: VirtualFile) : Node
-private data class SectionNode(val title: String) : Node
+private data class SectionNode(val title: String, val attention: Boolean = false) : Node
 private data class DepNode(val file: VirtualFile, val entry: Entry) : Node
 private data class VersionNode(val file: VirtualFile, val entry: Entry, val version: String) : Node
 private data class NotesNode(val title: String) : Node
@@ -117,17 +117,16 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                 for (f in files) {
                     val st = svc.states[f.path] ?: continue
                     val p = DefaultMutableTreeNode(ProjectNode(f))
+                    fun depNode(e: Entry) = DefaultMutableTreeNode(DepNode(f, e)).also { d ->
+                        // only versions newer than the installed one, so "Update to" never downgrades
+                        st.newer[e.name].orEmpty().take(30).forEach { d.add(DefaultMutableTreeNode(VersionNode(f, e, it))) }
+                    }
+                    val attention = needsAttention(st.entries, st.findings)
+                    if (attention.isNotEmpty()) p.add(DefaultMutableTreeNode(SectionNode("Needs attention (${attention.size})", attention = true)).also { s -> attention.forEach { s.add(depNode(it)) } })
                     for (section in listOf("dependencies", "devDependencies", "optionalDependencies")) {
                         val deps = st.entries.filter { it.section == section }
                         if (deps.isEmpty()) continue
-                        val s = DefaultMutableTreeNode(SectionNode("$section (${deps.size})"))
-                        for (e in deps) {
-                            val d = DefaultMutableTreeNode(DepNode(f, e))
-                            // only versions newer than the installed one, so "Update to" never downgrades
-                            st.newer[e.name].orEmpty().take(30).forEach { d.add(DefaultMutableTreeNode(VersionNode(f, e, it))) }
-                            s.add(d)
-                        }
-                        p.add(s)
+                        p.add(DefaultMutableTreeNode(SectionNode("$section (${deps.size})")).also { s -> deps.forEach { s.add(depNode(it)) } })
                     }
                     if (st.notes.isNotEmpty()) p.add(DefaultMutableTreeNode(NotesNode("Notes (${st.notes.size}) · source: ${sourceLabel(st.source)}")).also { n -> st.notes.forEach { n.add(DefaultMutableTreeNode(NoteNode(it))) } })
                     val sc = scripts[f].orEmpty()
@@ -211,7 +210,10 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                     val vulns = svc.states[n.file.path]?.findings?.count { it.kind == "vuln" || it.kind == "transitive" } ?: 0
                     if (vulns > 0) append("  $vulns vulnerable", SimpleTextAttributes.ERROR_ATTRIBUTES)
                 }
-                is SectionNode -> append(n.title, SimpleTextAttributes.GRAYED_BOLD_ATTRIBUTES)
+                is SectionNode -> {
+                    if (n.attention) icon = AllIcons.General.Warning
+                    append(n.title, SimpleTextAttributes.GRAYED_BOLD_ATTRIBUTES)
+                }
                 is NotesNode -> {
                     icon = AllIcons.General.Information
                     append(n.title, SimpleTextAttributes.GRAYED_BOLD_ATTRIBUTES)
