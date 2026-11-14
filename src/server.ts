@@ -4,7 +4,7 @@ import * as readline from 'readline';
 import { bumpTargets, newerVersions } from './versions/bump';
 import { formatReport } from './analysis/compat';
 import { generateUpgradeReport } from './analysis/report';
-import { compatFor, fixEffect, latestStable, rangeEdits, replaceAll } from './analysis/fixes';
+import { compatFor, fixEffect, pinsEffect, latestStable, rangeEdits, replaceAll } from './analysis/fixes';
 import { buildFindings } from './analysis/findings';
 import { addSorted, locateKeys, removeDependency } from './manifest/edit';
 import { importFindings } from './imports/findings';
@@ -94,6 +94,7 @@ const methods: Record<string, (p: Params) => unknown | Promise<unknown>> = {
   removeDependencyEdits: (p) => [replaceAll(p.text, removeDependency(p.text, p.name))],
   scriptLocations: (p) => locateKeys(p.text, 'scripts'),
   fixEffect: (p) => fixEffect(p.text, p.entry as DepEntry, p.fix as Fix, p.pkgFile),
+  pinsEffect: (p) => pinsEffect(p.text, p.pins as { section: string; name: string; range: string }[], p.pkgFile),
   importFindings: (p) => importFindings(p.text, p.manifests as ManifestFindings[]),
   clearCache: () => {
     clearOsvCache();
