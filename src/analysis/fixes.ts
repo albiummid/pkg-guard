@@ -68,6 +68,15 @@ export function fixEffect(text: string, entry: DepEntry, fx: Fix, pkgFile?: stri
   }
 }
 
+/** Writes several Pins at once: one whole-document edit of the manifest the Pins belong to (`file` when that is not the scanned one). */
+export function pinsEffect(text: string, pins: { section: string; name: string; range: string }[], pkgFile?: string): FixEffect {
+  const file = pinTarget(pkgFile);
+  const source = file ? fs.readFileSync(file, 'utf8') : text;
+  const out = pins.reduce((t, p) => addToSection(t, p.section, p.name, p.range), source);
+  const edits = [replaceAll(source, out)];
+  return file ? { type: 'edit', edits, file } : { type: 'edit', edits };
+}
+
 /** What else changes if `name` goes from its installed version to `target`. */
 export async function compatFor(c: CompatContext): Promise<CompatReport> {
   const dir = path.dirname(c.pkgFile);

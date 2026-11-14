@@ -8,6 +8,7 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 
 ### New Feature
 
+- JetBrains: a project's menu in the tool window has "Fix vulnerabilities": after a confirmation that lists them, it updates vulnerable dependencies (in every section that declares them) and pins Transitive vulnerabilities in the workspace root's `package.json`, then offers the install once.
 - JetBrains: the tool window shows each project's scan notes (unsupported lockfile, dependencies not checked, audit fallback) under an expandable "Notes (n)" entry with the data source of the last scan; a failed vulnerability check is shown in red.
 
 ### Fixes

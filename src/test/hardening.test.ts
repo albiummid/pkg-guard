@@ -10,7 +10,7 @@ import { buildNpmGraph, buildYarnGraph } from '../sources/lockfile';
 import { clearOsvCache, cvssScore, osvQuery, severityOf, toVuln } from '../sources/osv';
 import { clearRegistryCache, fetchInfo } from '../sources/registry';
 import { addToSection, locateDeps } from '../manifest/packageJson';
-import { fixEffect } from '../analysis/fixes';
+import { fixEffect, pinsEffect } from '../analysis/fixes';
 import { scan } from '../analysis/scan';
 import { ScanResult, Settings } from '../types';
 import { Vuln } from '../types/index';
@@ -461,4 +461,21 @@ test('fixEffect: a pin for a workspace member edits the root manifest', () => {
   assert.ok(effect.edits[0].newText.includes('"resolutions"'));
   const same = fixEffect(rootPkg, locateDeps(rootPkg)[0] ?? entry, fx, path.join(root, 'package.json'));
   assert.equal(same.type === 'edit' ? same.file : 'x', undefined); // the scanned manifest is the root: no redirect
+});
+
+test('pinsEffect: several pins land in the root manifest in one edit', () => {
+  const root = tmp();
+  fs.writeFileSync(path.join(root, 'yarn.lock'), '# yarn lockfile v1\n');
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'root', workspaces: ['packages/*'] }, null, 2) + '\n');
+  const member = path.join(root, 'packages', 'api');
+  fs.mkdirSync(member, { recursive: true });
+  const effect = pinsEffect('{}', [
+    { section: 'resolutions', name: 'qs', range: '^6.0.4' },
+    { section: 'resolutions', name: 'ws', range: '^8.17.1' },
+  ], path.join(member, 'package.json'));
+  assert.equal(effect.type, 'edit');
+  if (effect.type !== 'edit') return;
+  assert.equal(effect.file, path.join(root, 'package.json'));
+  assert.equal(effect.edits.length, 1);
+  assert.ok(effect.edits[0].newText.includes('"qs"') && effect.edits[0].newText.includes('"ws"'));
 });
