@@ -17,7 +17,7 @@ class ScanNotesTest {
     @Test
     fun `the data source is named for the user`() {
         assertEquals("OSV.dev", sourceLabel("osv"))
-        assertEquals("audit fallback", sourceLabel("audit"))
+        assertEquals("audit CLI", sourceLabel("audit"))
         assertEquals("none", sourceLabel("none"))
         assertEquals("none", sourceLabel("whatever"))
     }
