@@ -45,8 +45,11 @@ class PkgGuardService(private val project: Project) : Disposable {
     val sidecar: Sidecar get() = project.service()
     val settings: PkgGuardSettings get() = project.service()
 
+    /** Scans in flight, for the status bar busy state. */
+    val activity = ScanActivity { if (!project.isDisposed) project.messageBus.syncPublisher(PKG_GUARD_BUSY_TOPIC).changed() }
+
     private val coordinator = ScanCoordinator(
-        scanner = { path, text -> sidecar.call<ScanResponse>("scan", mapOf("text" to text, "pkgFile" to path, "settings" to settings.forSidecar(project))) },
+        scanner = { path, text -> activity.track { sidecar.call<ScanResponse>("scan", mapOf("text" to text, "pkgFile" to path, "settings" to settings.forSidecar(project))) } },
         onResult = { _, _ -> if (!project.isDisposed) project.messageBus.syncPublisher(PKG_GUARD_TOPIC).changed() },
         onError = { e ->
             log.warn("scan failed", e)

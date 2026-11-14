@@ -6,6 +6,10 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 
 ## [Unreleased]
 
+### New Feature
+
+- JetBrains: a status bar widget shows how many dependencies are vulnerable and how many updates are available (the tooltip names the data source); clicking it re-scans with fresh advisory and registry data.
+
 ### Fixes
 
 - A failed `npm audit` / `yarn audit` fallback (offline, an error report, the old npm 6 format) is now reported as a failed check instead of "no vulnerabilities".
