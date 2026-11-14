@@ -25,4 +25,11 @@
   <applicationListeners>
     <listener class="dev.pkgguard.PkgGuardFileListener" topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
   </applicationListeners>
+
+  <actions>
+    <action id="dev.pkgguard.Rescan" class="dev.pkgguard.RescanAction" text="Pkg Guard: Re-scan" description="Clear the advisory and registry caches and re-scan every package.json">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+      <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+    </action>
+  </actions>
 </idea-plugin>
