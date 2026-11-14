@@ -34,6 +34,7 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 
 ### New Feature
 
+- JetBrains: a "Pkg Guard: Re-scan" action in Find Action, the Tools menu and the editor popup of a `package.json` clears the caches and re-scans every project, like the tool window Refresh; it also works while the IDE is indexing.
 - Import warnings: vulnerable dependencies are flagged on their `import` / `require` lines in JS and TS files (end-of-line text, hover and Problems in VS Code; inspections in JetBrains). Toggle with `pkgGuard.importWarnings` or the JetBrains settings page.
 - JetBrains: end-of-line hints like VS Code (`⚠ 3 vulns → 4.18.1`) on package.json dependency lines and import lines.
 
