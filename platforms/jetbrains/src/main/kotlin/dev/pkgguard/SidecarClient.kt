@@ -140,8 +140,9 @@ class SidecarClient(
     @Synchronized
     fun restart() {
         current?.let {
-            it.process.destroy()
+            // fail the pending requests first: destroying the process makes its reader thread report "exited"
             it.failAll(ScannerRestartedException())
+            it.process.destroy()
         }
         current = null
     }
