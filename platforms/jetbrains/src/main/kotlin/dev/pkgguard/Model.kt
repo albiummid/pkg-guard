@@ -96,3 +96,6 @@ data class AddDependencyParams(val text: String, val section: String, val name: 
 data class RemoveDependencyParams(val text: String, val name: String)
 
 data class ScriptLocationsParams(val text: String)
+
+/** Reply of `versions`: the newest stable version and the newest stable versions, or null when the registry does not know the package. */
+data class VersionsResponse(val latest: String? = null, val versions: List<String> = emptyList(), val deprecated: String? = null)
