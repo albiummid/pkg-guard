@@ -2,11 +2,9 @@ package dev.pkgguard
 
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.openapi.wm.StatusBar
 import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.openapi.wm.StatusBarWidgetFactory
-import com.intellij.openapi.wm.impl.status.widget.StatusBarWidgetsManager
 import com.intellij.util.messages.Topic
 import com.intellij.util.Consumer
 import java.awt.Component
@@ -62,12 +60,6 @@ class PkgGuardStatusBarWidgetFactory : StatusBarWidgetFactory {
     override fun getId() = ID
     override fun getDisplayName() = "Pkg Guard"
 
-    /** Hidden until a package.json of the project has been scanned (or while one is being scanned). */
-    override fun isAvailable(project: Project): Boolean {
-        val service = project.service<PkgGuardService>()
-        return service.states.isNotEmpty() || service.activity.busy
-    }
-
     override fun createWidget(project: Project): StatusBarWidget = PkgGuardStatusBarWidget(project)
 
     companion object {
@@ -90,12 +82,15 @@ private class PkgGuardStatusBarWidget(private val project: Project) : StatusBarW
 
     private val service get() = project.service<PkgGuardService>()
 
+    /** Blank (so nothing shows) until a package.json of the project has been scanned or is being scanned. */
     override fun getText(): String {
         if (service.activity.busy) return "Pkg Guard: scanning…"
+        if (service.states.isEmpty()) return ""
         return "Pkg Guard: " + (StatusCounts.of(service.states.values)?.text ?: "no data")
     }
 
-    override fun getTooltipText(): String {
+    override fun getTooltipText(): String? {
+        if (service.states.isEmpty() && !service.activity.busy) return null
         val source = StatusCounts.of(service.states.values)?.sourceName ?: "no vulnerability data"
         return "Pkg Guard ($source) — click to re-scan"
     }
@@ -106,14 +101,5 @@ private class PkgGuardStatusBarWidget(private val project: Project) : StatusBarW
 
     override fun dispose() {
         statusBar = null
-    }
-}
-
-/** Shows or hides the widget when the first manifest has been scanned. */
-class PkgGuardStatusBarStartup : ProjectActivity {
-    override suspend fun execute(project: Project) {
-        project.messageBus.connect(project.service<PkgGuardService>()).subscribe(PKG_GUARD_TOPIC, PkgGuardListener {
-            project.service<StatusBarWidgetsManager>().updateWidget(PkgGuardStatusBarWidgetFactory::class.java)
-        })
     }
 }
