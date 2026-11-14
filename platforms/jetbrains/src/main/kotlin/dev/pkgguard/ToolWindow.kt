@@ -187,6 +187,7 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                     act("Open on npm") { BrowserUtil.browse("https://www.npmjs.com/package/${node.entry.name}") },
                     act("Open repository") { UpdateFlow.openRepo(project, node.entry) },
                     act("Go to dependency") { open(node.file, node.entry.line, node.entry.nameStart) },
+                    act("Remove dependency…") { RemoveDependency.run(project, node.file, node.entry.name) },
                     act("Copy package name") { com.intellij.openapi.ide.CopyPasteManager.getInstance().setContents(StringSelection(node.entry.name)) },
                 )
             }
