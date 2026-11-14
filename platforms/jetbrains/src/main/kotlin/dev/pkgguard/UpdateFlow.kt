@@ -167,7 +167,7 @@ object UpdateFlow {
         val st = scanned(project, file) ?: return
         val installed = st.installed[dep.name]
         val registry = svc.settings.state.registry
-        val newer = st.newer[dep.name].orEmpty() // worked out by the core: only versions above the installed one, even for a prerelease or an old install
+        val newer = st.newer[dep.name].orEmpty() // only versions above the installed one, whatever the installed version looks like
         if (installed == null || newer.isEmpty()) return openRepo(project, dep)
         val all = "Everything since $installed (up to ${newer.first()})"
         val pick = Messages.showEditableChooseDialog("Changelog of ${dep.name} (installed $installed)", "Pkg Guard", null, (listOf(all) + newer).toTypedArray(), all, null) ?: return

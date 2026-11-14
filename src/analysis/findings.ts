@@ -68,7 +68,7 @@ export function buildFindings(r: ScanResult, s: Settings): Finding[] {
         fixes.push({ type: 'setVersion', range, title: `Update ${e.name} to ${range} (fixes ${fixed} ${fixed === 1 ? 'advisory' : 'advisories'})` });
       }
       for (const id of new Set(direct.map((v) => v.id))) fixes.push({ type: 'ignoreAdvisory', id, title: `Ignore advisory ${id}` });
-      // without a lockfile or node_modules the installed version is only the lowest one the range allows
+      // without a lockfile or node_modules the version checked is only the Floor version of the range
       const guessed = r.installedFrom?.get(e.name) === 'floor';
       const count = `${direct.length} known ${direct.length === 1 ? 'vulnerability' : 'vulnerabilities'}`;
       out.push({

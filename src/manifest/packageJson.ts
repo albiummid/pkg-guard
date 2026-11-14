@@ -234,7 +234,7 @@ function editInPlace(text: string, keys: string[], name: string, range: string):
  * file stays byte for byte, and an existing nested npm override keeps its children. Falls back to re-serialising for odd shapes.
  */
 export function addToSection(text: string, section: string, name: string, range: string): string {
-  const obj = JSON.parse(text); // throws on invalid JSON, as before
+  const obj = JSON.parse(text); // throws on invalid JSON: nothing is edited in a manifest that cannot be parsed
   const keys = section.split('.');
   const edited = editInPlace(text, keys, name, range);
   if (edited !== null) {
