@@ -13,11 +13,11 @@ import { clearRegistryCache, fetchInfo } from './sources/registry';
 import { changelogBetween, fetchMeta, npmUrl } from './sources/changelog';
 import { scan } from './analysis/scan';
 import { compare, isStable } from './versions/semver';
-import { DepEntry, Fix, ManifestFindings, PinRequest, RangeUpdate, Settings } from './types';
+import { DepEntry, Fix, ManifestFindings, PinRequest, RangeUpdate, Settings, ScanResponse, CompatResponse, VersionsResponse, ChangelogResponse, RepoUrlResponse } from './types';
 
 type Params = Record<string, any>;
 
-async function doScan(p: Params) {
+async function doScan(p: Params): Promise<ScanResponse> {
   const settings = p.settings as Settings;
   const result = await scan(p.text, p.pkgFile, settings);
   const info: Record<string, { latest?: string; versions: string[]; deprecated: Record<string, string> }> = {};
@@ -53,7 +53,7 @@ async function doUpgradeReport(p: Params) {
   return generateUpgradeReport(p.text, p.pkgFile, result, buildFindings(result, settings), settings);
 }
 
-async function doCompat(p: Params) {
+async function doCompat(p: Params): Promise<CompatResponse> {
   const info = await fetchInfo(p.name, p.registry);
   if (!info) throw new Error(`Could not read ${p.name} from the registry.`);
   const installed = new Map<string, string>(Object.entries(p.installed ?? {}));
@@ -61,13 +61,13 @@ async function doCompat(p: Params) {
   return { ...report, text: formatReport(p.name, installed.get(p.name), p.target, report) };
 }
 
-async function doVersions(p: Params) {
+async function doVersions(p: Params): Promise<VersionsResponse | null> {
   const info = await fetchInfo(p.name, p.registry);
   if (!info) return null;
   return { latest: latestStable(info), versions: info.versions.filter(isStable).sort((a, b) => compare(b, a)).slice(0, 80), deprecated: info.deprecated };
 }
 
-async function doChangelog(p: Params) {
+async function doChangelog(p: Params): Promise<ChangelogResponse> {
   const meta = await fetchMeta(p.name, p.registry);
   if (!meta?.repo) return { url: npmUrl(p.name) };
   const releases = meta.repo.host === 'github' ? `${meta.repo.url}/releases` : meta.repo.url;
@@ -75,7 +75,7 @@ async function doChangelog(p: Params) {
   return res ? { source: res.source, markdown: res.markdown, url: releases } : { url: releases };
 }
 
-async function doRepoUrl(p: Params) {
+async function doRepoUrl(p: Params): Promise<RepoUrlResponse> {
   const meta = await fetchMeta(p.name, p.registry);
   const url = meta?.repo ? (meta.repo.directory && meta.repo.host === 'github' ? `${meta.repo.url}/tree/HEAD/${meta.repo.directory}` : meta.repo.url) : meta?.homepage;
   return { url: url ?? null, npm: npmUrl(p.name) };

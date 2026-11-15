@@ -28,7 +28,7 @@ Incorrect or missing advisories come from [OSV.dev](https://osv.dev), so report 
 
 Inside `src/`, code is grouped by role: `types/`, `versions/`, `manifest/`, `sources/`, `analysis/`, plus `server.ts` and `test/`. Keep the dependency direction in mind: `sources/` and `analysis/` may import from `types/`, `versions/` and `manifest/`, never the reverse. See the layout section of [README.md](README.md).
 
-If you add or change a sidecar method, update the Kotlin types in `platforms/jetbrains/src/main/kotlin/dev/pkgguard/Model.kt` by hand. They mirror the TypeScript shapes and are not generated yet.
+The TypeScript types in `src/types/` (replies the plugin reads are in `src/types/protocol.ts`) are the source of truth for the JSON the sidecar returns. If you add or change a sidecar method, change those types, then update the Kotlin mirror in `platforms/jetbrains/src/main/kotlin/dev/pkgguard/Model.kt` to match. `src/test/protocol.test.ts` (part of `yarn cli core test`, so part of CI) parses both and fails with the differing fields when a name, type or optionality disagrees; a Kotlin class named differently from its TypeScript type, or a TypeScript field the plugin ignores on purpose, is listed at the top of that test.
 
 ## Setup
 

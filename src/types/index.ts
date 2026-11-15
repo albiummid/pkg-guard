@@ -7,3 +7,4 @@ export * from './report';
 export * from './scan';
 export * from './vulnerability';
 export * from './imports';
+export * from './protocol';
