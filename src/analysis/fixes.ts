@@ -8,7 +8,7 @@ import { fetchInfo } from '../sources/registry';
 import { satisfies } from '../versions/satisfies';
 import { readInstalledPkg } from './scan';
 import { baseVersion, gt, isStable, prefixOf } from '../versions/semver';
-import { CompatContext, CompatReport, DepEntry, Dependent, Finding, Fix, FixEffect, RangeUpdate, RegistryInfo, Section, TextEdit } from '../types';
+import { CompatContext, CompatReport, DepEntry, Dependent, Finding, Fix, FixEffect, PinRequest, RangeUpdate, RegistryInfo, Section, TextEdit } from '../types';
 
 export function latestStable(info: RegistryInfo): string | undefined {
   let best = info.latest && isStable(info.latest) ? info.latest : undefined;
@@ -66,6 +66,15 @@ export function fixEffect(text: string, entry: DepEntry, fx: Fix, pkgFile?: stri
     case 'install':
       return { type: 'install' };
   }
+}
+
+/** Writes several Pins at once: one whole-document edit of the manifest the Pins belong to (`file` when that is not the scanned one). */
+export function pinsEffect(text: string, pins: PinRequest[], pkgFile?: string): FixEffect {
+  const file = pinTarget(pkgFile);
+  const source = file ? fs.readFileSync(file, 'utf8') : text;
+  const out = pins.reduce((t, p) => addToSection(t, p.section, p.name, p.range), source);
+  const edits = [replaceAll(source, out)];
+  return file ? { type: 'edit', edits, file } : { type: 'edit', edits };
 }
 
 /** What else changes if `name` goes from its installed version to `target`. */

@@ -45,8 +45,11 @@ class PkgGuardService(private val project: Project) : Disposable {
     val sidecar: Sidecar get() = project.service()
     val settings: PkgGuardSettings get() = project.service()
 
+    /** Scans in flight, for the status bar busy state. */
+    val activity = ScanActivity { if (!project.isDisposed) project.messageBus.syncPublisher(PKG_GUARD_BUSY_TOPIC).changed() }
+
     private val coordinator = ScanCoordinator(
-        scanner = { path, text -> sidecar.call<ScanResponse>("scan", mapOf("text" to text, "pkgFile" to path, "settings" to settings.forSidecar(project))) },
+        scanner = { path, text -> activity.track { sidecar.call<ScanResponse>("scan", mapOf("text" to text, "pkgFile" to path, "settings" to settings.forSidecar(project))) } },
         onResult = { _, _ -> if (!project.isDisposed) project.messageBus.syncPublisher(PKG_GUARD_TOPIC).changed() },
         onError = { e ->
             log.warn("scan failed", e)
@@ -103,7 +106,9 @@ class PkgGuardService(private val project: Project) : Disposable {
                 // runs under an indicator tied to this service, so the waits in the scanner client can be cancelled
                 ProgressManager.getInstance().runProcess({
                     if (clearCaches) sidecar.call<Boolean>("clearCache")
-                    for (file in findProjects()) {
+                    val files = findProjects()
+                    dropMissing(files)
+                    for (file in files) {
                         if (project.isDisposed) break
                         coordinator.scan(file.path, textOf(file), force = true)
                     }
@@ -112,6 +117,30 @@ class PkgGuardService(private val project: Project) : Disposable {
                 // the project closed or the service was disposed while waiting
             } catch (e: Exception) {
                 log.warn("refresh failed", e)
+            } finally {
+                ApplicationManager.getApplication().invokeLater({ if (!project.isDisposed) DaemonRestart.restart(project) }, project.disposed)
+            }
+        }
+    }
+
+    /** A deleted or moved package.json must not keep showing counts: forget its results and tell the listeners. */
+    private fun dropMissing(files: Collection<VirtualFile>) {
+        if (coordinator.retainOnly(files.map { it.path }) && !project.isDisposed) project.messageBus.syncPublisher(PKG_GUARD_TOPIC).changed()
+    }
+
+    /** Scans every package.json of the project once in the background (after indexing), so results are ready before anything is opened. */
+    fun scanAllOnOpen() {
+        ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                ProgressManager.getInstance().runProcess({
+                    val byPath = findProjects().associateBy { it.path }
+                    dropMissing(byPath.values)
+                    coordinator.scanAll(byPath.keys) { path -> textOf(byPath.getValue(path)) }
+                }, lifetime)
+            } catch (e: ProcessCanceledException) {
+                // the project closed while waiting
+            } catch (e: Exception) {
+                log.warn("initial scan failed", e)
             } finally {
                 ApplicationManager.getApplication().invokeLater({ if (!project.isDisposed) DaemonRestart.restart(project) }, project.disposed)
             }

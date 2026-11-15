@@ -79,7 +79,7 @@ object Fixer {
         }
         applyEdits(project, target, edits)
         if (target !== file) saveDocument(target) // a pin lives in the workspace root's package.json; the install must see it
-        svc.states[file.path]?.pm?.let { Installer.offer(project, file, it) }
+        Installer.offer(project, file, svc.states[file.path]?.pm)
     }
 
     /** Runs on the EDT (the intention action), where the open document can be read directly. */
@@ -91,8 +91,14 @@ object Fixer {
 }
 
 object Installer {
-    /** Honours `installAfterFix` (ask / auto / never) and never installs in an untrusted project. */
-    fun offer(project: Project, file: VirtualFile, pm: Pm) {
+    /**
+     * Saves `file` first, whatever the setting, trust state or package manager: an install reads package.json from disk, and an
+     * edit must not stay unsaved because no install runs. Then honours `installAfterFix` (ask / auto / never); never installs in an
+     * untrusted project or when no package manager is known.
+     */
+    fun offer(project: Project, file: VirtualFile, pm: Pm?) {
+        saveDocument(file)
+        if (pm == null) return
         val mode = project.service<PkgGuardSettings>().state.installAfterFix
         if (mode == "never" || !ProjectTrust.isTrusted(project)) return
         ApplicationManager.getApplication().invokeLater {

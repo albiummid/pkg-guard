@@ -36,9 +36,11 @@ import javax.swing.tree.DefaultTreeModel
 
 private sealed interface Node
 private data class ProjectNode(val file: VirtualFile) : Node
-private data class SectionNode(val title: String) : Node
+private data class SectionNode(val title: String, val attention: Boolean = false) : Node
 private data class DepNode(val file: VirtualFile, val entry: Entry) : Node
 private data class VersionNode(val file: VirtualFile, val entry: Entry, val version: String) : Node
+private data class NotesNode(val title: String) : Node
+private data class NoteNode(val text: String) : Node
 private data class ScriptNode(val file: VirtualFile, val name: String, val command: String) : Node
 
 class PkgGuardToolWindowFactory : ToolWindowFactory, DumbAware {
@@ -58,6 +60,7 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
     init {
         tree.isRootVisible = false
         tree.cellRenderer = Renderer()
+        tree.emptyText.text = "" // set by rebuild() once the manifests are known, never while they are being scanned
         setContent(ScrollPaneFactory.createScrollPane(tree))
 
         val refresh = object : DumbAwareAction("Refresh", "Re-scan all package.json files", AllIcons.Actions.Refresh) {
@@ -115,23 +118,24 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                 for (f in files) {
                     val st = svc.states[f.path] ?: continue
                     val p = DefaultMutableTreeNode(ProjectNode(f))
+                    fun depNode(e: Entry) = DefaultMutableTreeNode(DepNode(f, e)).also { d ->
+                        // only versions newer than the installed one, so "Update to" never downgrades
+                        st.newer[e.name].orEmpty().take(30).forEach { d.add(DefaultMutableTreeNode(VersionNode(f, e, it))) }
+                    }
+                    val attention = needsAttention(st.entries, st.findings)
+                    if (attention.isNotEmpty()) p.add(DefaultMutableTreeNode(SectionNode("Needs attention (${attention.size})", attention = true)).also { s -> attention.forEach { s.add(depNode(it)) } })
                     for (section in listOf("dependencies", "devDependencies", "optionalDependencies")) {
                         val deps = st.entries.filter { it.section == section }
                         if (deps.isEmpty()) continue
-                        val s = DefaultMutableTreeNode(SectionNode("$section (${deps.size})"))
-                        for (e in deps) {
-                            val d = DefaultMutableTreeNode(DepNode(f, e))
-                            // only versions newer than the installed one, so "Update to" never downgrades
-                            st.newer[e.name].orEmpty().take(30).forEach { d.add(DefaultMutableTreeNode(VersionNode(f, e, it))) }
-                            s.add(d)
-                        }
-                        p.add(s)
+                        p.add(DefaultMutableTreeNode(SectionNode("$section (${deps.size})")).also { s -> deps.forEach { s.add(depNode(it)) } })
                     }
+                    if (st.notes.isNotEmpty()) p.add(DefaultMutableTreeNode(NotesNode("Notes (${st.notes.size}) · source: ${sourceLabel(st.source)}")).also { n -> st.notes.forEach { n.add(DefaultMutableTreeNode(NoteNode(it))) } })
                     val sc = scripts[f].orEmpty()
                     if (sc.isNotEmpty()) p.add(DefaultMutableTreeNode(SectionNode("scripts (${sc.size})")).also { s -> sc.forEach { (n, c) -> s.add(DefaultMutableTreeNode(ScriptNode(f, n, c))) } })
                     root.add(p)
                 }
                 val expanded = (0 until tree.rowCount).filter { tree.isExpanded(it) }
+                tree.emptyText.text = emptyStateText(files.size)
                 model.setRoot(root)
                 (0 until root.childCount).forEach { tree.expandRow(it) }
                 expanded.forEach { if (it < tree.rowCount) tree.expandRow(it) }
@@ -165,6 +169,8 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                     act("Update all — patch") { UpdateFlow.updateAll(project, node.file, "patch") },
                     act("Update all — minor") { UpdateFlow.updateAll(project, node.file, "minor") },
                     act("Update all — major") { UpdateFlow.updateAll(project, node.file, "major") },
+                    act("Add dependency…") { AddDependency.run(project, node.file, st?.pm) },
+                    act("Fix vulnerabilities") { FixVulns.run(project, node.file) },
                     act("Upgrade report…") { UpdateFlow.upgradeReport(project, node.file) },
                     act("Open package.json") { open(node.file, 0, 0) },
                 )
@@ -184,15 +190,20 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                     act("Open on npm") { BrowserUtil.browse("https://www.npmjs.com/package/${node.entry.name}") },
                     act("Open repository") { UpdateFlow.openRepo(project, node.entry) },
                     act("Go to dependency") { open(node.file, node.entry.line, node.entry.nameStart) },
+                    act("Remove dependency…") { RemoveDependency.run(project, node.file, node.entry.name) },
                     act("Copy package name") { com.intellij.openapi.ide.CopyPasteManager.getInstance().setContents(StringSelection(node.entry.name)) },
                 )
             }
-            is VersionNode -> listOf(act("Update to ${node.version}") { UpdateFlow.update(project, node.file, node.entry, node.version) })
+            is VersionNode -> listOf(
+                act("Update to ${node.version}") { UpdateFlow.update(project, node.file, node.entry, node.version) },
+                act("Changelog: installed to this") { UpdateFlow.versionChangelog(project, node.file, node.entry, node.version, thisOnly = false) },
+                act("Changelog: this version only") { UpdateFlow.versionChangelog(project, node.file, node.entry, node.version, thisOnly = true) },
+            )
             is ScriptNode -> listOf(act("Run script") {
                 val pm = svc.states[node.file.path]?.pm?.name ?: "npm"
                 Installer.runScript(project, node.file.parent.path, pm, node.name)
             })
-            is SectionNode -> emptyList()
+            is SectionNode, is NotesNode, is NoteNode -> emptyList()
         }
     }
 
@@ -208,7 +219,18 @@ private class PkgGuardPanel(private val project: Project) : SimpleToolWindowPane
                     val vulns = svc.states[n.file.path]?.findings?.count { it.kind == "vuln" || it.kind == "transitive" } ?: 0
                     if (vulns > 0) append("  $vulns vulnerable", SimpleTextAttributes.ERROR_ATTRIBUTES)
                 }
-                is SectionNode -> append(n.title, SimpleTextAttributes.GRAYED_BOLD_ATTRIBUTES)
+                is SectionNode -> {
+                    if (n.attention) icon = AllIcons.General.Warning
+                    append(n.title, SimpleTextAttributes.GRAYED_BOLD_ATTRIBUTES)
+                }
+                is NotesNode -> {
+                    icon = AllIcons.General.Information
+                    append(n.title, SimpleTextAttributes.GRAYED_BOLD_ATTRIBUTES)
+                }
+                is NoteNode -> if (isCheckFailure(n.text)) {
+                    icon = AllIcons.General.Error
+                    append(n.text, SimpleTextAttributes.ERROR_ATTRIBUTES)
+                } else append(n.text, SimpleTextAttributes.GRAYED_ATTRIBUTES)
                 is DepNode -> {
                     val st = svc.states[n.file.path]
                     val findings = st?.findings?.filter { it.entry.name == n.entry.name && it.entry.section == n.entry.section }.orEmpty()

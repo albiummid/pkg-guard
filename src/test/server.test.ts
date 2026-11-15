@@ -64,3 +64,55 @@ test('server: scan offline returns findings, installed versions and pm', async (
   assert.deepEqual(r.result.findings, []);
   assert.equal(r.result.pm.name, 'npm');
 });
+
+const call = async (method: string, params: unknown) => JSON.parse(await handle(JSON.stringify({ id: 9, method, params })));
+const apply = (text: string, e: { startLine: number; startChar: number; endLine: number; endChar: number; newText: string }) => {
+  const lines = text.split('\n');
+  const off = (l: number, c: number) => lines.slice(0, l).reduce((n, s) => n + s.length + 1, 0) + c;
+  return text.slice(0, off(e.startLine, e.startChar)) + e.newText + text.slice(off(e.endLine, e.endChar));
+};
+const CRLF = '{\r\n  "dependencies": {\r\n    "b": "1.0.0"\r\n  },\r\n  "scripts": {\r\n    "build": "tsc",\r\n    "dev": "x"\r\n  }\r\n}\r\n';
+const TAB = '{\n\t"devDependencies": {\n\t\t"b": "1.0.0"\n\t}\n}\n';
+
+test('server: addDependencyEdits inserts sorted into the chosen section (CRLF, tab indent)', async () => {
+  const r = await call('addDependencyEdits', { text: CRLF, section: 'dependencies', name: 'a', range: '^2.0.0' });
+  assert.equal(r.id, 9);
+  assert.equal(r.result.length, 1);
+  const out = apply(CRLF, r.result[0]);
+  assert.deepEqual(Object.keys(JSON.parse(out).dependencies), ['a', 'b']);
+  assert.ok(out.includes('\r\n  "dependencies": {\r\n    "a": "^2.0.0",\r\n'));
+  assert.ok(!/[^\r]\n/.test(out));
+  const t = await call('addDependencyEdits', { text: TAB, section: 'devDependencies', name: 'a', range: '^1.0.0' });
+  assert.equal(apply(TAB, t.result[0]), '{\n\t"devDependencies": {\n\t\t"a": "^1.0.0",\n\t\t"b": "1.0.0"\n\t}\n}\n');
+});
+
+test('server: removeDependencyEdits removes from every section and drops an emptied one', async () => {
+  const r = await call('removeDependencyEdits', { text: CRLF, name: 'b' });
+  const out = apply(CRLF, r.result[0]);
+  assert.equal(JSON.parse(out).dependencies, undefined);
+  assert.ok(out.startsWith('{\r\n  "scripts"'));
+  const t = await call('removeDependencyEdits', { text: TAB, name: 'b' });
+  assert.equal(apply(TAB, t.result[0]), '{}\n');
+});
+
+test('server: scriptLocations returns the line of each script', async () => {
+  assert.deepEqual((await call('scriptLocations', { text: CRLF })).result, [{ key: 'build', line: 5 }, { key: 'dev', line: 6 }]);
+  assert.deepEqual((await call('scriptLocations', { text: TAB })).result, []);
+});
+
+test('server: scriptLocations handles 4-space and odd indentation', async () => {
+  const four = '{\n    "scripts": {\n        "build": "tsc",\n        "dev": "x"\n    }\n}\n';
+  assert.deepEqual((await call('scriptLocations', { text: four })).result, [{ key: 'build', line: 2 }, { key: 'dev', line: 3 }]);
+  const odd = '{\n   "scripts": {\n     "build": "tsc",\n      "dev": "x"\n   }\n}\n';
+  assert.deepEqual((await call('scriptLocations', { text: odd })).result, [{ key: 'build', line: 2 }, { key: 'dev', line: 3 }]);
+});
+
+test('server: pinsEffect writes every pin into the manifest in one whole-document edit', async () => {
+  const text = '{\n  "name": "app"\n}\n';
+  const pins = [{ section: 'overrides', name: 'qs', range: '^6.0.4' }, { section: 'overrides', name: 'ms', range: '^2.1.3' }];
+  const r = await call('pinsEffect', { text, pins });
+  assert.equal(r.result.type, 'edit');
+  assert.equal(r.result.file, undefined); // no pkgFile: the scanned manifest itself
+  assert.equal(r.result.edits.length, 1);
+  assert.deepEqual(JSON.parse(apply(text, r.result.edits[0])).overrides, { ms: '^2.1.3', qs: '^6.0.4' });
+});

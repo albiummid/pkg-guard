@@ -85,3 +85,9 @@ data class ChangelogResponse(val source: String? = null, val markdown: String? =
 data class RepoUrl(val url: String? = null, val npm: String)
 
 data class RangeUpdate(val name: String, val version: String, val section: String? = null)
+
+// Params of the manifest-editing methods. `addDependencyEdits` and `removeDependencyEdits` answer List<TextEdit> (one whole-document replacement).
+data class RemoveDependencyParams(val text: String, val name: String)
+
+/** Reply of `versions`: the newest stable version, the newest stable versions and the deprecated ones (version to message); the call answers null when the registry does not know the package. */
+data class VersionsResponse(val latest: String? = null, val versions: List<String> = emptyList(), val deprecated: Map<String, String>? = null)

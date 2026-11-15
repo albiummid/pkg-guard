@@ -34,6 +34,18 @@ class ScanCoordinatorTest {
     }
 
     @Test
+    fun `results of a manifest that no longer exists are dropped`() {
+        val calls = AtomicInteger()
+        val c = ScanCoordinator(scanner = { _, text -> response("$text#${calls.incrementAndGet()}") })
+        c.scan("/a/package.json", "v1")
+        c.scan("/b/package.json", "v1")
+        assertTrue(c.retainOnly(listOf("/a/package.json")))
+        assertEquals(setOf("/a/package.json"), c.states.keys)
+        assertTrue(!c.retainOnly(listOf("/a/package.json")))
+        assertEquals("v1#3", c.scan("/b/package.json", "v1").tag()) // a re-created manifest is scanned afresh
+    }
+
+    @Test
     fun `unchanged text reuses the stored result and a forced scan asks again`() {
         val calls = AtomicInteger()
         val c = ScanCoordinator(scanner = { _, text -> response("$text#${calls.incrementAndGet()}") })
@@ -147,5 +159,38 @@ class ScanCoordinatorTest {
         c.scan("/p", "v2")
         assertEquals(listOf("/p=v1", "/p=v2"), published)
         assertSame(c.states["/p"], c.scan("/p", "v2"))
+    }
+
+    @Test
+    fun `opening scans each manifest exactly once, also when one was already scanned or is running`() {
+        val calls = CopyOnWriteArrayList<String>()
+        val release = CountDownLatch(1)
+        val c = ScanCoordinator(scanner = { path, text ->
+            calls += path
+            if (path == "/slow") release.await()
+            response(text)
+        })
+        c.scan("/open", "text") // highlighted before the project-wide scan got to it
+        val running = async { c.scan("/slow", "text") }
+        Thread.sleep(150)
+        val all = async { c.scanAll(listOf("/a", "/open", "/slow", "/b", "/a")) { "text" } }
+        Thread.sleep(150)
+        release.countDown()
+        all.get(5, TimeUnit.SECONDS)
+        running.get(5, TimeUnit.SECONDS)
+        assertEquals(listOf("/a", "/b", "/open", "/slow"), calls.sorted())
+        assertEquals(setOf("/a", "/b", "/open", "/slow"), c.states.keys)
+    }
+
+    @Test
+    fun `scanning no manifests does nothing and a failing one does not stop the others`() {
+        val calls = AtomicInteger()
+        val errors = CopyOnWriteArrayList<String>()
+        val c = ScanCoordinator(scanner = { path, text -> calls.incrementAndGet(); if (path == "/bad") error("boom") else response(text) }, onError = { errors += it.message.orEmpty() })
+        c.scanAll(emptyList()) { "text" }
+        assertEquals(0, calls.get())
+        c.scanAll(listOf("/bad", "/good")) { "text" }
+        assertEquals(setOf("/good"), c.states.keys)
+        assertEquals(listOf("boom"), errors)
     }
 }

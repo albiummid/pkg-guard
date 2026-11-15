@@ -69,6 +69,26 @@ class ScanCoordinator(
         }
     }
 
+    /** Forgets the results of manifests that are no longer in [paths] (a package.json deleted or moved). True when something was dropped. */
+    fun retainOnly(paths: Collection<String>): Boolean {
+        val keep = paths.toSet()
+        var dropped = false
+        for (path in states.keys.toList()) {
+            if (path in keep) continue
+            slots.remove(path)
+            if (states.remove(path) != null) dropped = true
+        }
+        return dropped
+    }
+
+    /** Scans every manifest in [paths] once (duplicates ignored), reusing results and scans already there; a failing one does not stop the rest. */
+    fun scanAll(paths: Collection<String>, textOf: (String) -> String) {
+        for (path in paths.distinct()) {
+            checkCanceled()
+            scan(path, textOf(path))
+        }
+    }
+
     private fun run(path: String, slot: Slot, job: Job): ScanResponse? {
         var result: ScanResponse? = null
         try {

@@ -17,6 +17,7 @@
     <externalAnnotator language="" implementationClass="dev.pkgguard.ImportAnnotator"/>
     <editor.linePainter implementation="dev.pkgguard.PkgGuardLinePainter"/>
     <postStartupActivity implementation="dev.pkgguard.PkgGuardStartup"/>
+    <statusBarWidgetFactory id="dev.pkgguard.status" implementation="dev.pkgguard.PkgGuardStatusBarWidgetFactory"/>
     <toolWindow id="Pkg Guard" anchor="right" icon="/icons/pkgGuard.svg" factoryClass="dev.pkgguard.PkgGuardToolWindowFactory"/>
     <projectConfigurable parentId="tools" id="dev.pkgguard.settings" instance="dev.pkgguard.PkgGuardConfigurable" displayName="Pkg Guard"/>
     <notificationGroup id="Pkg Guard" displayType="BALLOON"/>
@@ -25,4 +26,11 @@
   <applicationListeners>
     <listener class="dev.pkgguard.PkgGuardFileListener" topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
   </applicationListeners>
+
+  <actions>
+    <action id="dev.pkgguard.Rescan" class="dev.pkgguard.RescanAction" text="Pkg Guard: Re-scan" description="Clear the advisory and registry caches and re-scan every package.json">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+      <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+    </action>
+  </actions>
 </idea-plugin>
