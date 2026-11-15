@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { attribute, runAudit } from '../sources/audit';
 import { buildNpmGraph, buildYarnGraph } from '../sources/lockfile';
+import { buildPnpmGraph } from '../sources/pnpmLock';
 import { osvQuery } from '../sources/osv';
 import { locateDeps } from '../manifest/packageJson';
 import { fetchInfo } from '../sources/registry';
@@ -13,8 +14,8 @@ import { DepEntry, PackageManager, RegistryInfo, ScanResult, Settings } from '..
 export const SKIP_RANGE = /^(workspace:|file:|link:|git|http|npm:|github:|portal:|patch:|catalog:)|\//;
 
 /** Lockfile names in the order the package manager is detected (see detectPm), with the manager each belongs to. */
-const LOCKFILES: { file: string; pm: PackageManager['name']; readable: 'yarn' | 'npm' | null }[] = [
-  { file: 'pnpm-lock.yaml', pm: 'pnpm', readable: null },
+const LOCKFILES: { file: string; pm: PackageManager['name']; readable: 'yarn' | 'npm' | 'pnpm' | null }[] = [
+  { file: 'pnpm-lock.yaml', pm: 'pnpm', readable: 'pnpm' },
   { file: 'yarn.lock', pm: 'yarn', readable: 'yarn' },
   { file: 'bun.lock', pm: 'bun', readable: null },
   { file: 'bun.lockb', pm: 'bun', readable: null },
@@ -25,7 +26,7 @@ const LOCKFILES: { file: string; pm: PackageManager['name']; readable: 'yarn' | 
 const exists = (p: string): Promise<boolean> => fs.promises.access(p).then(() => true, () => false);
 
 /** The nearest lockfile of any package manager. `kind` is null for the ones this tool cannot read. */
-async function findLock(dir: string): Promise<{ file: string; kind: 'yarn' | 'npm' | null; pm: PackageManager['name'] } | null> {
+async function findLock(dir: string): Promise<{ file: string; kind: 'yarn' | 'npm' | 'pnpm' | null; pm: PackageManager['name'] } | null> {
   for (let d = dir; ; d = path.dirname(d)) {
     for (const l of LOCKFILES) {
       if (await exists(path.join(d, l.file))) return { file: path.join(d, l.file), kind: l.readable, pm: l.pm };
@@ -120,14 +121,17 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
   } else if (lock) {
     try {
       const text = await fs.promises.readFile(lock.file, 'utf8');
-      // a workspace member resolves its own entry (yarn berry) or nested copies (npm) before the root's
+      // a workspace member resolves its own entry (yarn berry, pnpm importer) or nested copies (npm) before the root's
       const rel = path.relative(path.dirname(lock.file), dir).split(path.sep).join('/');
       const member = rel.startsWith('..') ? '' : rel;
-      graph = lock.kind === 'yarn' ? buildYarnGraph(text, rootDeps, member) : buildNpmGraph(JSON.parse(text), rootDeps, member);
+      graph =
+        lock.kind === 'yarn' ? buildYarnGraph(text, rootDeps, member)
+        : lock.kind === 'pnpm' ? buildPnpmGraph(text, rootDeps, member || '.')
+        : buildNpmGraph(JSON.parse(text), rootDeps, member);
     } catch (e) {
       notes.push(`could not read lockfile: ${e}`);
     }
-    if (!graph) notes.push('lockfile format not supported (package-lock v1?); transitive checks disabled');
+    if (!graph) notes.push('lockfile format not supported (package-lock v1? a pnpm-lock.yaml with no lockfileVersion?); transitive checks disabled');
   }
   const g: Graph = graph ?? { kind: 'none', nodes: new Map(), roots: new Map() };
   result.lock = g.kind;
@@ -169,7 +173,7 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
       result.hits = attribute(g, vulns);
       result.source = 'osv';
     } catch (e) {
-      if (s.auditFallback && g.kind !== 'none') {
+      if (s.auditFallback && (g.kind === 'yarn' || g.kind === 'npm')) {
         try {
           // runAudit only returns a complete report; anything else throws, so a failed audit is never taken for "no vulnerabilities"
           result.hits = await runAudit(g.kind, path.dirname(lock!.file));

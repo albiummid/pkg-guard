@@ -362,8 +362,8 @@ test('a pin keeps an existing nested npm override instead of replacing it', () =
 
 // ---------------------------------------------------------------- scan
 
-test('scan: a pnpm or bun lockfile produces a note that transitive checks are off', async () => {
-  for (const lockfile of ['pnpm-lock.yaml', 'bun.lock']) {
+test('scan: a bun lockfile produces a note that transitive checks are off', async () => {
+  for (const lockfile of ['bun.lock']) {
     const d = tmp();
     fs.writeFileSync(path.join(d, lockfile), '');
     const r = await scan(PKG, path.join(d, 'package.json'), offline);
