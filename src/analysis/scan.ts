@@ -8,13 +8,13 @@ import { locateDeps } from '../manifest/packageJson';
 import { fetchInfo } from '../sources/registry';
 import { baseVersion } from '../versions/semver';
 import { detectPm } from '../manifest/packageManager';
-import { Graph, } from '../types/index';
+import { Graph, LockKind } from '../types/index';
 import { PackageManager, ScanResult, Settings } from '../types';
 
 export const SKIP_RANGE = /^(workspace:|file:|link:|git|http|npm:|github:|portal:|patch:|catalog:)|\//;
 
 /** Lockfile names in the order the package manager is detected (see detectPm), with the manager each belongs to. */
-const LOCKFILES: { file: string; pm: PackageManager['name']; readable: 'yarn' | 'npm' | 'pnpm' | 'bun' | null }[] = [
+const LOCKFILES: { file: string; pm: PackageManager['name']; readable: LockKind | null }[] = [
   { file: 'pnpm-lock.yaml', pm: 'pnpm', readable: 'pnpm' },
   { file: 'yarn.lock', pm: 'yarn', readable: 'yarn' },
   { file: 'bun.lock', pm: 'bun', readable: 'bun' },
@@ -26,7 +26,7 @@ const LOCKFILES: { file: string; pm: PackageManager['name']; readable: 'yarn' | 
 const exists = (p: string): Promise<boolean> => fs.promises.access(p).then(() => true, () => false);
 
 /** The nearest lockfile of any package manager. `kind` is null for the ones this tool cannot read. */
-async function findLock(dir: string): Promise<{ file: string; kind: 'yarn' | 'npm' | 'pnpm' | 'bun' | null; pm: PackageManager['name'] } | null> {
+async function findLock(dir: string): Promise<{ file: string; kind: LockKind | null; pm: PackageManager['name'] } | null> {
   for (let d = dir; ; d = path.dirname(d)) {
     for (const l of LOCKFILES) {
       if (await exists(path.join(d, l.file))) return { file: path.join(d, l.file), kind: l.readable, pm: l.pm };

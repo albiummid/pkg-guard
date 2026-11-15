@@ -74,8 +74,8 @@ function userFile(): string {
   return process.env.NPM_CONFIG_USERCONFIG || path.join(os.homedir(), '.npmrc');
 }
 
-/** `//host/path/` form npm uses to key credentials. */
-export function nerf(url: string): string | null {
+/** `//host/path/` form npm uses to key credentials (npm calls it the "nerf dart"). */
+export function registryKey(url: string): string | null {
   try {
     const u = new URL(url);
     return `//${u.host}${u.pathname.endsWith('/') ? u.pathname : u.pathname + '/'}`;
@@ -123,7 +123,7 @@ function sameUrl(a: string, b: string): boolean {
 }
 
 function authorizationFor(registry: string, cfg: NpmrcConfig): string | undefined {
-  let key = nerf(registry);
+  let key = registryKey(registry);
   // exact prefix first, then shorter paths up to the host root, as npm does; never another host
   while (key) {
     const a = cfg.auth.get(key);
@@ -144,6 +144,6 @@ export function resolveRegistry(name: string, fallback: string, scope: NpmrcScop
   const pkgScope = name.startsWith('@') ? name.slice(0, name.indexOf('/')) : null;
   let registry: string | undefined = pkgScope ? cfg.scopes.get(pkgScope) : undefined;
   if (registry === undefined) registry = cfg.registry && sameUrl(fallback, PUBLIC) ? cfg.registry : fallback;
-  if (!nerf(registry) || !/^https?:\/\//i.test(registry)) return { registry: null };
+  if (!registryKey(registry) || !/^https?:\/\//i.test(registry)) return { registry: null };
   return { registry, authorization: authorizationFor(registry, cfg) };
 }
