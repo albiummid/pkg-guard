@@ -295,7 +295,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
     }),
   );
 
-  const watcher = vscode.workspace.createFileSystemWatcher('**/{yarn.lock,package-lock.json,pnpm-lock.yaml,package.json}');
+  const watcher = vscode.workspace.createFileSystemWatcher('**/{yarn.lock,package-lock.json,pnpm-lock.yaml,bun.lock,package.json}');
   let watchTimer: NodeJS.Timeout | undefined;
   const onFile = (u: vscode.Uri) => {
     if (/[\\/]node_modules[\\/]/.test(u.fsPath)) return;

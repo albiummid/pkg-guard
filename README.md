@@ -8,12 +8,12 @@ Vulnerability warnings and update suggestions right inside your `package.json`, 
 
 - **Inline warnings** next to each dependency: known vulnerabilities, newer patch / minor / major versions.
 - **Import warnings**: the same vulnerability warnings on the `import` / `require` lines of vulnerable packages in JS and TS files.
-- **Transitive vulnerabilities** from `yarn.lock` (classic or berry) or `package-lock.json`, shown on the direct dependency that pulls them in.
+- **Transitive vulnerabilities** from `yarn.lock` (classic or berry), `package-lock.json`, `pnpm-lock.yaml` or `bun.lock`, shown on the direct dependency that pulls them in.
 - **One-click fixes**: update to the fixed version, pin a transitive package via `resolutions` / `overrides`, ignore an advisory.
 - **Compatibility check** before an update: peer dependencies, `engines.node`, and companion updates for packages that would break.
 - **Changelog** between your installed version and the target.
 - **Project actions** (tool window / sidebar): add or remove a dependency, fix every vulnerability at once, re-scan; plus a status bar summary of vulnerable and outdated dependencies and a "Needs attention" list.
-- Installs and Pins work with npm, yarn, pnpm and bun. Transitive vulnerability checks need `yarn.lock` (classic or berry), `package-lock.json`, `npm-shrinkwrap.json` or `pnpm-lock.yaml` (workspace members are read from their own importer); with a bun lockfile only the direct dependencies are checked, and the scan notes say so. Advisories come from [OSV.dev](https://osv.dev), versions from the npm registry.
+- Installs and Pins work with npm, yarn, pnpm and bun. Transitive vulnerability checks need `yarn.lock` (classic or berry), `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml` (workspace members are read from their own importer) or the text `bun.lock` (not the binary `bun.lockb`); with a `bun.lockb` only the direct dependencies are checked, and the scan notes say so. Advisories come from [OSV.dev](https://osv.dev), versions from the npm registry.
 
 ## Install
 

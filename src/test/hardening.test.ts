@@ -362,13 +362,24 @@ test('a pin keeps an existing nested npm override instead of replacing it', () =
 
 // ---------------------------------------------------------------- scan
 
-test('scan: a bun lockfile produces a note that transitive checks are off', async () => {
-  for (const lockfile of ['bun.lock']) {
+test('scan: a binary bun.lockb produces a note that transitive checks are off', async () => {
+  for (const lockfile of ['bun.lockb']) {
     const d = tmp();
     fs.writeFileSync(path.join(d, lockfile), '');
     const r = await scan(PKG, path.join(d, 'package.json'), offline);
     assert.ok(r.notes.some((n) => n.includes(lockfile) && /transitive/i.test(n)), `${lockfile}: ${r.notes.join(' | ')}`);
   }
+});
+
+test('scan: a bun.lock gives the installed version and the nested copies', async () => {
+  const d = tmp();
+  fs.copyFileSync(path.join(__dirname, '..', '..', 'src', 'test', 'fixtures', 'bun.lock'), path.join(d, 'bun.lock'));
+  const text = JSON.stringify({ dependencies: { express: '^4.18.0' } });
+  const r = await scan(text, path.join(d, 'package.json'), offline);
+  assert.equal(r.lock, 'bun');
+  assert.equal(r.installed.get('express'), '4.18.2');
+  assert.deepEqual(r.copies!.get('qs')!.sort(), ['6.0.1', '6.11.0', '6.11.2']);
+  assert.equal(r.pm.overrideSection, 'overrides');
 });
 
 test('scan: the nearest lockfile wins over one in a parent folder', async () => {

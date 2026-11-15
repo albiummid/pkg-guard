@@ -507,7 +507,7 @@
         "pkgGuard.checkTransitive": {
           "type": "boolean",
           "default": true,
-          "description": "Also report vulnerabilities in transitive dependencies (needs a yarn.lock, package-lock.json or pnpm-lock.yaml). They are shown on the direct dependency that pulls them in."
+          "description": "Also report vulnerabilities in transitive dependencies (needs a yarn.lock, package-lock.json, pnpm-lock.yaml or bun.lock). They are shown on the direct dependency that pulls them in."
         },
         "pkgGuard.refreshIntervalHours": {
           "type": "number",

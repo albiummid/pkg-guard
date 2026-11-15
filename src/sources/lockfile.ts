@@ -191,3 +191,80 @@ export function buildNpmGraph(json: any, rootDeps: Record<string, string>, from 
   }
   return { kind: 'npm', nodes, roots };
 }
+
+/** bun.lock is JSONC: it allows trailing commas and comments, which JSON.parse does not. */
+function parseJsonc(text: string): any {
+  let out = '';
+  let inStr = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) {
+      out += c;
+      if (c === '\\') out += text[++i] ?? '';
+      else if (c === '"') inStr = false;
+    } else if (c === '"') {
+      inStr = true;
+      out += c;
+    } else if (c === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i++;
+      out += '\n';
+    } else if (c === '/' && text[i + 1] === '*') {
+      i = text.indexOf('*/', i + 2);
+      if (i < 0) break;
+      i++;
+    } else out += c;
+  }
+  return JSON.parse(out.replace(/,(\s*[}\]])/g, '$1'));
+}
+
+/** Splits a bun.lock package key (`a/b`, `@s/n/@s/m`) into the package names it nests. */
+function keySegments(key: string): string[] {
+  const parts = key.split('/');
+  const out: string[] = [];
+  for (let i = 0; i < parts.length; i++) out.push(parts[i].startsWith('@') && i + 1 < parts.length ? `${parts[i]}/${parts[++i]}` : parts[i]);
+  return out;
+}
+
+/**
+ * Text lockfile of bun (bun.lock). Returns null when it cannot be read; the binary bun.lockb is never passed here.
+ * A package key is its install path: `foo` is the hoisted copy, `bar/foo` the copy nested under bar.
+ */
+export function buildBunGraph(text: string, rootDeps: Record<string, string>): Graph | null {
+  let pk: Record<string, any>;
+  try {
+    pk = parseJsonc(text)?.packages;
+  } catch {
+    return null;
+  }
+  if (!pk || typeof pk !== 'object') return null;
+  const nodes = new Map<string, GNode>();
+  for (const [key, entry] of Object.entries(pk)) {
+    const ident = Array.isArray(entry) && typeof entry[0] === 'string' ? entry[0] : '';
+    const at = ident.lastIndexOf('@');
+    const version = ident.slice(at + 1);
+    // workspace members, file:, git and tarball entries are not registry packages
+    if (at <= 0 || !/^\d/.test(version)) continue;
+    nodes.set(key, { id: key, name: ident.slice(0, at), version, deps: [] });
+  }
+  const resolve = (dep: string, from: string): string | undefined => {
+    const segs = from ? keySegments(from) : [];
+    for (let n = segs.length; n >= 0; n--) {
+      const cand = [...segs.slice(0, n), dep].join('/');
+      if (nodes.has(cand)) return cand;
+    }
+    return undefined;
+  };
+  for (const [key, node] of nodes) {
+    const meta = pk[key][2] ?? {};
+    for (const d of Object.keys({ ...meta.dependencies, ...meta.optionalDependencies, ...meta.peerDependencies })) {
+      const t = resolve(d, key);
+      if (t && !node.deps.includes(t)) node.deps.push(t);
+    }
+  }
+  const roots = new Map<string, string>();
+  for (const d of Object.keys(rootDeps)) {
+    const t = resolve(d, '');
+    if (t) roots.set(d, t);
+  }
+  return { kind: 'bun', nodes, roots };
+}
