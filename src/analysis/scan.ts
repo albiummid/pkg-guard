@@ -26,13 +26,22 @@ const LOCKFILES: { file: string; pm: PackageManager['name']; readable: LockKind 
 
 const exists = (p: string): Promise<boolean> => fs.promises.access(p).then(() => true, () => false);
 
+/** True at the last folder a parent walk looks at: the filesystem root, or `stopAt` when set (see ScanOptions). */
+const lastFolder = (d: string, stopAt?: string): boolean => path.dirname(d) === d || (!!stopAt && path.resolve(d) === path.resolve(stopAt));
+
+/** Seams for tests. */
+export interface ScanOptions {
+  /** The highest folder searched for lockfiles, node_modules and the package manager; unset searches up to the filesystem root. */
+  stopAt?: string;
+}
+
 /** The nearest lockfile of any package manager. `kind` is null for the ones this tool cannot read. */
-async function findLock(dir: string): Promise<{ file: string; kind: LockKind | null; pm: PackageManager['name'] } | null> {
+async function findLock(dir: string, stopAt?: string): Promise<{ file: string; kind: LockKind | null; pm: PackageManager['name'] } | null> {
   for (let d = dir; ; d = path.dirname(d)) {
     for (const l of LOCKFILES) {
       if (await exists(path.join(d, l.file))) return { file: path.join(d, l.file), kind: l.readable, pm: l.pm };
     }
-    if (path.dirname(d) === d) return null;
+    if (lastFolder(d, stopAt)) return null;
   }
 }
 
@@ -49,21 +58,21 @@ export function readInstalledPkg(dir: string, name: string): any | undefined {
 }
 
 /** Same lookup as readInstalledPkg without blocking the host's thread; the scan reads one file per dependency. */
-async function installedFromNodeModules(dir: string, name: string): Promise<string | undefined> {
+async function installedFromNodeModules(dir: string, name: string, stopAt?: string): Promise<string | undefined> {
   for (let d = dir; ; d = path.dirname(d)) {
     try {
       return JSON.parse(await fs.promises.readFile(path.join(d, 'node_modules', name, 'package.json'), 'utf8'))?.version;
     } catch {
       /* keep walking up */
     }
-    if (path.dirname(d) === d) return undefined;
+    if (lastFolder(d, stopAt)) return undefined;
   }
 }
 
-async function hasNodeModules(dir: string): Promise<boolean> {
+async function hasNodeModules(dir: string, stopAt?: string): Promise<boolean> {
   for (let d = dir; ; d = path.dirname(d)) {
     if (await exists(path.join(d, 'node_modules'))) return true;
-    if (path.dirname(d) === d) return false;
+    if (lastFolder(d, stopAt)) return false;
   }
 }
 
@@ -76,10 +85,11 @@ async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>): Prom
   );
 }
 
-export async function scan(text: string, pkgFile: string, s: Settings): Promise<ScanResult> {
+export async function scan(text: string, pkgFile: string, s: Settings, opts: ScanOptions = {}): Promise<ScanResult> {
+  const { stopAt } = opts;
   const notes: string[] = [];
   const entries = locateDeps(text);
-  const result: ScanResult = { entries, installed: new Map(), hits: [], info: new Map(), lock: 'none', pm: detectPm(path.dirname(pkgFile)), source: 'none', notes };
+  const result: ScanResult = { entries, installed: new Map(), hits: [], info: new Map(), lock: 'none', pm: detectPm(path.dirname(pkgFile), undefined, stopAt), source: 'none', notes };
   let pkg: any;
   try {
     pkg = JSON.parse(text);
@@ -88,7 +98,7 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
     return result;
   }
   const dir = path.dirname(pkgFile);
-  result.pm = detectPm(dir, pkg);
+  result.pm = detectPm(dir, pkg, stopAt);
   // A Pin goes to the workspace root manifest, so what that manifest declares decides whether a Pin is safe.
   if (result.pm.root) {
     const rootManifest = path.join(result.pm.root, 'package.json');
@@ -114,7 +124,7 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
 
   // 1. resolve what is actually installed (lockfile > node_modules > range)
   let graph: Graph | null = null;
-  const lock = await findLock(dir);
+  const lock = await findLock(dir, stopAt);
   if (lock && lock.pm !== result.pm.name) {
     notes.push(`${path.basename(lock.file)} belongs to ${lock.pm}, not ${result.pm.name}; it was ignored and transitive vulnerability checks are off`);
   } else if (lock && !lock.kind) {
@@ -141,9 +151,9 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
   for (const n of g.nodes.values()) result.copies.set(n.name, [...(result.copies.get(n.name) ?? []), n.version]);
   const from = (result.installedFrom = new Map());
   const onDisk = (result.onDisk = new Map<string, string>());
-  result.hasNodeModules = await hasNodeModules(dir);
+  result.hasNodeModules = await hasNodeModules(dir, stopAt);
   // one read per dependency, all at once, instead of one blocking read after another
-  const disks = await Promise.all(entries.map((e) => installedFromNodeModules(dir, e.name)));
+  const disks = await Promise.all(entries.map((e) => installedFromNodeModules(dir, e.name, stopAt)));
   /** Declared range of each dependency checked at its Floor version (nothing installed). */
   const floorRanges = new Map<string, string>();
   for (const [i, e] of entries.entries()) {

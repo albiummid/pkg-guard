@@ -21,36 +21,58 @@ const range = (events: object[]) => [{ package: { ecosystem: 'npm', name: 'p' },
 /** Published versions of `p`: 1.0.0 to 1.3.0, a 1.4.0 prerelease, and 2.0.0 outside ^1.0.0. */
 const PUBLISHED = ['1.0.0', '1.1.0', '1.2.0', '1.3.0', '1.4.0-beta.1', '2.0.0'];
 
+interface ScanFloorOptions {
+  /** settings that differ from the defaults above */
+  settings?: Partial<Settings>;
+  /** the registry does not know `p` (no registry data) */
+  noRegistry?: boolean;
+  /** Advisory ids whose details OSV fails to return */
+  failDetails?: string[];
+  /** keep the OSV and registry caches of the previous scan */
+  keepCache?: boolean;
+}
+
 /**
- * Scans a manifest declaring `p` at `declared` in a folder with no lockfile and no node_modules, against a stubbed registry and
- * an OSV that returns `advisories`. Returns the Findings and every OSV query body.
+ * Scans a manifest declaring `p` at `declared` in a temporary folder with no lockfile and no node_modules (parent folders are not
+ * searched), against a stubbed registry and an OSV that knows `advisories`. A query with a version gets only the Advisories that
+ * affect that version, like OSV.dev. Returns the Findings, every OSV query body and the ids whose details were fetched.
  */
-async function scanFloor(declared: string, advisories: any[]) {
-  clearOsvCache();
-  clearRegistryCache();
+async function scanFloor(declared: string, advisories: any[], o: ScanFloorOptions = {}) {
+  if (!o.keepCache) {
+    clearOsvCache();
+    clearRegistryCache();
+  }
+  const s = { ...settings, ...o.settings };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pg-allowed-'));
   const text = `{\n  "dependencies": {\n    "p": "${declared}"\n  }\n}\n`;
   const queries: any[] = [];
+  const details: string[] = [];
   const real = globalThis.fetch;
   globalThis.fetch = (async (input: any, init?: any) => {
     const url = String(input);
     if (url.endsWith('/querybatch')) {
       const body = JSON.parse(init.body);
-      // a lockfile in a parent of the temp folder adds its own packages; only the queries for p are counted
-      queries.push(...body.queries.filter((q: any) => q.package.name === 'p'));
-      return json({ results: body.queries.map(() => ({ vulns: advisories.map((a) => ({ id: a.id })) })) });
+      queries.push(...body.queries);
+      const hits = (q: any) => advisories.filter((a) => q.version === undefined || isAffected(a.affected, q.package.name, q.version));
+      return json({ results: body.queries.map((q: any) => ({ vulns: hits(q).map((a) => ({ id: a.id })) })) });
     }
-    if (url.includes('/vulns/')) return json(advisories.find((a) => url.endsWith(`/${a.id}`)));
-    if (url.startsWith('https://registry.example/')) {
+    if (url.includes('/vulns/')) {
+      const id = decodeURIComponent(url.slice(url.lastIndexOf('/') + 1));
+      details.push(id);
+      if (o.failDetails?.includes(id)) return json({}, 500);
+      return json(advisories.find((a) => a.id === id));
+    }
+    if (url.startsWith('https://registry.example/') && !o.noRegistry) {
       return json({ 'dist-tags': { latest: '2.0.0' }, versions: Object.fromEntries(PUBLISHED.map((v) => [v, {}])) });
     }
     return json({}, 404);
   }) as typeof fetch;
   try {
-    const r = await scan(text, path.join(dir, 'package.json'), settings);
-    return { r, findings: buildFindings(r, settings), queries };
+    const r = await scan(text, path.join(dir, 'package.json'), s, { stopAt: dir });
+    return { r, findings: buildFindings(r, s), queries, details };
   } finally {
     globalThis.fetch = real;
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 }
 
