@@ -8,7 +8,7 @@ import { fetchInfo } from '../sources/registry';
 import { satisfies } from '../versions/satisfies';
 import { readInstalledPkg } from './scan';
 import { baseVersion, gt, isStable, prefixOf } from '../versions/semver';
-import { CompatContext, CompatReport, DepEntry, Dependent, Finding, Fix, FixEffect, PinRequest, RangeUpdate, RegistryInfo, Section, TextEdit } from '../types';
+import { CompatContext, CompatReport, DepEntry, Dependent, Fix, FixEffect, PinRequest, RangeUpdate, RegistryInfo, TextEdit } from '../types';
 
 export function latestStable(info: RegistryInfo): string | undefined {
   let best = info.latest && isStable(info.latest) ? info.latest : undefined;

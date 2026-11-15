@@ -67,7 +67,7 @@ test('addToSection keeps CRLF, indent and trailing newline', () => {
   assert.ok(out.includes('\r\n') && !/[^\r]\n/.test(out));
   assert.ok(out.endsWith('\r\n'));
   assert.ok(out.includes('    "body-parser": "^2.4.0"'));
-  assert.equal(JSON.parse(out).resolutions['uuid'], '^11.1.1');
+  assert.equal(JSON.parse(out).resolutions.uuid, '^11.1.1');
   const fresh = addToSection('{\n  "name": "x"\n}', 'overrides', 'a', '^1.0.0');
   assert.deepEqual(JSON.parse(fresh).overrides, { a: '^1.0.0' });
   assert.ok(!fresh.endsWith('\n'));

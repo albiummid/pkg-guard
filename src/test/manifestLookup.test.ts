@@ -9,7 +9,7 @@ const resolveAll = (...ps: string[]) => ps.map((p) => path.resolve(p));
 function fakeFs(initial: string[]) {
   const files = new Set(resolveAll(...initial));
   let probes = 0;
-  return { files, exists: (p: string) => (probes++, files.has(p)), probes: () => probes };
+  return { files, exists: (p: string) => { probes++; return files.has(p); }, probes: () => probes };
 }
 
 test('manifest lookup: repeated edits in one folder probe the file system once', () => {

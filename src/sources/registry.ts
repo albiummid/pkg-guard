@@ -64,7 +64,7 @@ export function suggest(installed: string, info: RegistryInfo): Suggestion {
 }
 
 /** Newest stable version >= `min`, preferring the installed major (a fix is usually followed by more patches). */
-export function pickAtLeast(min: string, installed: string, info: RegistryInfo | null): string {
+export function pickAtLeast(min: string, _installed: string, info: RegistryInfo | null): string {
   if (!info) return min;
   const stable = info.versions.filter((v) => isStable(v) && compare(v, min) >= 0);
   const sameMajor = stable.filter((v) => major(v) === major(min));

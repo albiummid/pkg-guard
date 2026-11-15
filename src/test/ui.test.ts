@@ -4,7 +4,6 @@ import { checkCompat, findCompanion, formatReport } from '../analysis/compat';
 import { addSorted, locateKeys, removeDependency } from '../manifest/edit';
 import { normalizeRepo, sliceChangelog, tagVersion } from '../sources/changelog';
 import { isRange, satisfies } from '../versions/satisfies';
-import { Companion } from '../types';
 
 test('satisfies: caret, tilde, x-ranges, comparators, hyphen, ||, prerelease', () => {
   const yes: [string, string][] = [
