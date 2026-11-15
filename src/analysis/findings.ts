@@ -37,10 +37,18 @@ function advisoryLines(vs: Vuln[]): string {
   return lines.join('\n');
 }
 
-/** The affected versions of a dependency checked with nothing installed, oldest first ("1.0.1, 1.0.2 and 3 more"). */
+/** The affected Allowed versions of a dependency checked with nothing installed, oldest first ("1.0.1, 1.0.2 and 3 more"). */
 function versionList(vs: Vuln[]): string {
-  const all = [...new Set(vs.flatMap((v) => v.affectedAllowed ?? [v.version]))].sort(compare);
+  const all = [...new Set(vs.flatMap((v) => v.affectedAllowed ?? []))].sort(compare);
   return all.length > 4 ? `${all.slice(0, 4).join(', ')} and ${all.length - 4} more` : all.join(', ');
+}
+
+/** "p may be vulnerable (…)" for a dependency with nothing installed; names the affected Allowed versions when they were checked and are known. */
+function guessedLead(name: string, range: string, installed: string | undefined, vs: Vuln[]): string {
+  // only the Floor version was checked (Allowed versions not known): the version is the one guessed
+  if (!vs.some((v) => v.affectedAllowed)) return `${name}@${installed ?? '?'} may be vulnerable (version guessed from ${range})`;
+  const list = versionList(vs);
+  return `${name} may be vulnerable (version guessed from ${range}${list ? `, which allows affected ${list}` : ''})`;
 }
 
 export function buildFindings(r: ScanResult, s: Settings): Finding[] {
@@ -83,7 +91,7 @@ export function buildFindings(r: ScanResult, s: Settings): Finding[] {
         level: diagLevel(worst.severity),
         code: worst.id,
         url: worst.url,
-        message: (guessed ? `${e.name} may be vulnerable (version guessed from ${e.range}, which allows affected ${versionList(direct)}): ${count}` : `${e.name}@${installed ?? '?'} has ${count}`) + ` (${breakdown(direct)})` +
+        message: (guessed ? `${guessedLead(e.name, e.range, installed, direct)}: ${count}` :`${e.name}@${installed ?? '?'} has ${count}`) + ` (${breakdown(direct)})` +
           (need ? `. Fixed in ${need}.` : '. No fixed version known.') + '\n' + advisoryLines(direct),
         inline: target ? `⚠ ${direct.length} vuln${direct.length === 1 ? '' : 's'} → ${prefix + target}` : `⚠ ${direct.length} vuln${direct.length === 1 ? '' : 's'}`,
         fixes,

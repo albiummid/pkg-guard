@@ -163,3 +163,27 @@ test('an affected allowed version in a last_affected range leaves the Advisory w
   assert.match(f.message, /which allows affected 1\.0\.0, 1\.2\.0\)/);
   assert.match(f.message, /No fixed version known/);
 });
+
+test('an Advisory whose details cannot be fetched is still reported, and fetched again by the next scan', async () => {
+  const gone = { id: 'GHSA-gone', summary: 'later release', affected: range([{ introduced: '1.2.0' }, { fixed: '1.3.0' }]) };
+  const first = await scanFloor('^1.0.0', [gone], { failDetails: ['GHSA-gone'] });
+  const f = first.findings.find((x) => x.kind === 'vuln')!;
+  assert.ok(f, 'expected a vulnerability Finding');
+  assert.equal(f.code, 'GHSA-gone');
+  // the affected versions are not known, so none are named, and no fix is offered
+  assert.match(f.message, /^p may be vulnerable \(version guessed from \^1\.0\.0\): 1 known vulnerability \(1 unknown\)\. No fixed version known\./);
+  assert.equal(f.fixes.filter((x) => x.type === 'setVersion').length, 0);
+
+  // the failure was not cached: the next scan asks for the details again and names the affected versions
+  const second = await scanFloor('^1.0.0', [gone], { keepCache: true });
+  assert.deepEqual(second.details, ['GHSA-gone']);
+  assert.match(second.findings.find((x) => x.kind === 'vuln')!.message, /which allows affected 1\.2\.0\)/);
+});
+
+test('a malware record whose details cannot be fetched is reported as critical by its id', async () => {
+  const mal = { id: 'MAL-gone', affected: range([{ introduced: '1.2.0' }, { fixed: '1.3.0' }]) };
+  const { findings } = await scanFloor('^1.0.0', [mal], { failDetails: ['MAL-gone'] });
+  const f = findings.find((x) => x.kind === 'vuln')!;
+  assert.equal(f.level, 'error');
+  assert.match(f.message, /\(1 critical\)/);
+});

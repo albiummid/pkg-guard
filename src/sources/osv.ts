@@ -201,8 +201,11 @@ function fetchDetail(id: string): Promise<void> {
  * The Vulnerability of Advisory `d` across the allowed versions it affects, or undefined when it affects none. Its fixed version
  * clears all of them: the highest fix of the ranges they fall in, known only when every such range has one and it is above each
  * affected version. A version named only in the explicit `versions` list has no fix of its own, so it does not erase one.
+ * Without details (`d` is only `{ id }`) the affected versions cannot be named: the Advisory is reported anyway, with an empty
+ * `affectedAllowed`, no fixed version, and the severity its id alone gives (unknown, or critical for malware).
  */
 function allowedVuln(d: any, p: Pkg): Vuln | undefined {
+  if (!d.affected) return { ...toVuln(d, p.name, p.version), fixedIn: undefined, affectedAllowed: [] };
   const hit = (p.allowed ?? []).filter((v) => isAffected(d.affected, p.name, v)).sort(compare);
   if (!hit.length) return undefined;
   let fixedIn: string | undefined;
@@ -219,8 +222,8 @@ function allowedVuln(d: any, p: Pkg): Vuln | undefined {
 
 /**
  * Throws when OSV is unreachable so the caller can fall back to an audit CLI. Keys are "name@version". A package with `allowed`
- * costs the same one query as any other. An Advisory whose details could not be fetched has no ranges to match, so it is left
- * out for such a package until a later scan fetches them.
+ * costs the same one query as any other, plus the details of each of its Advisories (cached). An Advisory whose details could
+ * not be fetched is still reported, by its id alone; the failure is not cached, so a later scan fetches them again.
  */
 export async function osvQuery(pkgs: Pkg[]): Promise<Map<string, Vuln[]>> {
   const unique = [...new Map(pkgs.filter((p) => p.version).map((p) => [keyOf(p), p])).values()];
