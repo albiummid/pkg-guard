@@ -12,7 +12,7 @@ function nameOfSpec(spec: string): string {
   return alias ? alias[1] : spec.slice(0, spec.lastIndexOf('@'));
 }
 
-/** Parses yarn classic (v1) lockfiles. Returns null for yarn berry. */
+/** Parses yarn classic (v1) lockfiles. Returns null for yarn berry (see parseBerryLock). */
 export function parseYarnLock(text: string): Map<string, YarnPkg> | null {
   if (/^__metadata:/m.test(text)) return null;
   const index = new Map<string, YarnPkg>();
@@ -53,9 +53,81 @@ export function parseYarnLock(text: string): Map<string, YarnPkg> | null {
   return index;
 }
 
-export function buildYarnGraph(text: string, rootDeps: Record<string, string>): Graph | null {
-  const index = parseYarnLock(text);
-  if (!index) return null;
+/** A yarn berry lockfile: its package entries by descriptor, and the workspace entries by folder ('.' is the root). */
+interface BerryLock {
+  index: Map<string, YarnPkg>;
+  workspaces: Map<string, Record<string, string>>;
+}
+
+/** Parses a yarn berry (v2+) yarn.lock. Workspace members and other non-registry entries are not packages, so they get no node. */
+function parseBerryLock(text: string): BerryLock {
+  const index = new Map<string, YarnPkg>();
+  const workspaces = new Map<string, Record<string, string>>();
+  const unquote = (s: string) => s.trim().replace(/^"(.*)"$/, '$1');
+  let cur: { specs: string[]; pkg: YarnPkg; resolution: string } | null = null;
+  let inDeps = false;
+  const flush = () => {
+    if (cur) {
+      const ws = /@workspace:(.*)$/.exec(cur.resolution);
+      if (ws) workspaces.set(ws[1], cur.pkg.deps);
+      else if (cur.pkg.version && /^@?[^@]+@npm:/.test(cur.resolution)) for (const s of cur.specs) index.set(s, cur.pkg);
+    }
+    cur = null;
+    inDeps = false;
+  };
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim() || line.startsWith('#')) continue;
+    if (!line.startsWith(' ')) {
+      flush();
+      const key = unquote(line.replace(/:\s*$/, ''));
+      if (key === '__metadata') continue;
+      cur = { specs: key.split(/,\s+(?=@?[^@\s,]+@)/).map((x) => x.trim()), pkg: { name: '', version: '', deps: {} }, resolution: '' };
+      continue;
+    }
+    if (!cur) continue;
+    const indent = line.length - line.trimStart().length;
+    if (indent === 2) {
+      const m = /^\s+(\w+):\s*(.*)$/.exec(line);
+      inDeps = !!m && m[1] === 'dependencies' && !m[2];
+      if (m?.[1] === 'version') cur.pkg.version = unquote(m[2]);
+      else if (m?.[1] === 'resolution') {
+        cur.resolution = unquote(m[2]);
+        cur.pkg.name = /^(@?[^@]+)@/.exec(cur.resolution)?.[1] ?? '';
+      }
+    } else if (indent === 4 && inDeps) {
+      const m = /^\s+("[^"]+"|[^\s:]+):\s*(.*)$/.exec(line);
+      if (m) cur.pkg.deps[unquote(m[1])] = unquote(m[2]);
+    }
+  }
+  flush();
+  return { index, workspaces };
+}
+
+/** The lockfile key of a dependency range: a plain range is an npm range; an alias (`npm:real@^1`) or other protocol keeps its own prefix. */
+const berryKey = (name: string, range: string) => `${name}@${/^[a-z]+:/.test(range) ? range : 'npm:' + range}`;
+
+/**
+ * Graph of a yarn.lock, classic (v1) or berry (v2+).
+ * `from` is the folder of the manifest being scanned relative to the lockfile ('' or '.' for the root, 'packages/api' for a workspace member):
+ * in a berry lockfile its dependencies resolve from the member's own workspace entry.
+ */
+export function buildYarnGraph(text: string, rootDeps: Record<string, string>, from = ''): Graph | null {
+  let index: Map<string, YarnPkg>;
+  let find: (d: string, r: string) => YarnPkg | undefined;
+  let ranges = rootDeps;
+  if (/^__metadata:/m.test(text)) {
+    const lock = parseBerryLock(text);
+    index = lock.index;
+    find = (d, r) => index.get(berryKey(d, r));
+    // the member's own entry holds the ranges yarn resolved (after `resolutions`); fall back to the manifest's
+    const own = lock.workspaces.get(from || '.');
+    if (own) ranges = Object.fromEntries(Object.keys(rootDeps).map((d) => [d, own[d] ?? rootDeps[d]]));
+  } else {
+    const classic = parseYarnLock(text);
+    if (!classic) return null;
+    index = classic;
+    find = (d, r) => index.get(`${d}@${r}`);
+  }
   const nodes = new Map<string, GNode>();
   const idOf = (p: YarnPkg) => `${p.name}@${p.version}`;
   const pkgs = new Set(index.values());
@@ -66,13 +138,13 @@ export function buildYarnGraph(text: string, rootDeps: Record<string, string>): 
   for (const p of pkgs) {
     const node = nodes.get(idOf(p))!;
     for (const [d, r] of Object.entries(p.deps)) {
-      const t = index.get(`${d}@${r}`);
+      const t = find(d, r);
       if (t && !node.deps.includes(idOf(t))) node.deps.push(idOf(t));
     }
   }
   const roots = new Map<string, string>();
-  for (const [d, r] of Object.entries(rootDeps)) {
-    const t = index.get(`${d}@${r}`);
+  for (const [d, r] of Object.entries(ranges)) {
+    const t = find(d, r);
     if (t) roots.set(d, idOf(t));
   }
   return { kind: 'yarn', nodes, roots };

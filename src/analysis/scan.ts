@@ -120,16 +120,14 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
   } else if (lock) {
     try {
       const text = await fs.promises.readFile(lock.file, 'utf8');
-      if (lock.kind === 'yarn') graph = buildYarnGraph(text, rootDeps);
-      else {
-        // a workspace member resolves its own nested copies before the root's
-        const rel = path.relative(path.dirname(lock.file), dir).split(path.sep).join('/');
-        graph = buildNpmGraph(JSON.parse(text), rootDeps, rel.startsWith('..') ? '' : rel);
-      }
+      // a workspace member resolves its own entry (yarn berry) or nested copies (npm) before the root's
+      const rel = path.relative(path.dirname(lock.file), dir).split(path.sep).join('/');
+      const member = rel.startsWith('..') ? '' : rel;
+      graph = lock.kind === 'yarn' ? buildYarnGraph(text, rootDeps, member) : buildNpmGraph(JSON.parse(text), rootDeps, member);
     } catch (e) {
       notes.push(`could not read lockfile: ${e}`);
     }
-    if (!graph) notes.push('lockfile format not supported (yarn berry / package-lock v1?); transitive checks disabled');
+    if (!graph) notes.push('lockfile format not supported (package-lock v1?); transitive checks disabled');
   }
   const g: Graph = graph ?? { kind: 'none', nodes: new Map(), roots: new Map() };
   result.lock = g.kind;
