@@ -7,6 +7,7 @@ import { osvQuery } from '../sources/osv';
 import { locateDeps } from '../manifest/packageJson';
 import { fetchInfo } from '../sources/registry';
 import { baseVersion } from '../versions/semver';
+import { satisfies } from '../versions/satisfies';
 import { detectPm } from '../manifest/packageManager';
 import { Graph, LockKind } from '../types/index';
 import { PackageManager, ScanResult, Settings } from '../types';
@@ -143,6 +144,8 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
   result.hasNodeModules = await hasNodeModules(dir);
   // one read per dependency, all at once, instead of one blocking read after another
   const disks = await Promise.all(entries.map((e) => installedFromNodeModules(dir, e.name)));
+  /** Declared range of each dependency checked at its Floor version (nothing installed). */
+  const floorRanges = new Map<string, string>();
   for (const [i, e] of entries.entries()) {
     const rid = g.roots.get(e.name);
     const locked = rid ? g.nodes.get(rid)?.version : undefined;
@@ -157,6 +160,7 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
     if (!rid && v) {
       // no lockfile: synthesize a root node so the vulnerability lookup still works
       const id = `${e.name}@${v}`;
+      if (!disk) floorRanges.set(e.name, e.range);
       g.nodes.set(id, { id, name: e.name, version: v, deps: [] });
       g.roots.set(e.name, id);
     }
@@ -165,11 +169,28 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
   const unknown = entries.filter((e) => !result.installed.has(e.name) && !SKIP_RANGE.test(e.range)).map((e) => e.name);
   if (unknown.length) notes.push(`no version is known for ${unknown.length} ${unknown.length === 1 ? 'dependency' : 'dependencies'} (a tag, a union or another range with no lowest version, and nothing installed), so ${unknown.length === 1 ? 'it was' : 'they were'} not checked: ${unknown.join(', ')}`);
 
-  // 2. vulnerabilities
+  // 2. registry (updates + deprecations, and the versions a range allows when nothing is installed)
+  if (s.enableOutdated) {
+    const names = [...new Set(entries.filter((e) => result.installed.has(e.name) && !SKIP_RANGE.test(e.range)).map((e) => e.name))];
+    await pool(names, 8, async (n) => {
+      const info = await fetchInfo(n, s.registry, { dir: path.dirname(pkgFile), trusted: s.trusted });
+      if (info) result.info.set(n, info);
+    });
+  }
+
+  // 3. vulnerabilities
   if (s.enableVulnerabilities) {
     try {
-      let nodes = [...g.nodes.values()];
+      let nodes: { name: string; version: string; allowed?: string[] }[] = [...g.nodes.values()];
       if (!s.checkTransitive || g.kind === 'none') nodes = [...g.roots.values()].map((id) => g.nodes.get(id)!);
+      // Nothing installed: every published version the range allows is checked, not only the Floor version. Those come from the
+      // registry data fetched above for Updates; without it (update checks off, registry unreachable) only the Floor version is.
+      nodes = nodes.map((n) => {
+        const range = floorRanges.get(n.name);
+        if (!range || g.roots.get(n.name) !== `${n.name}@${n.version}`) return n;
+        const allowed = (result.info.get(n.name)?.versions ?? []).filter((v) => satisfies(v, range));
+        return { ...n, allowed: allowed.length ? allowed : [n.version] };
+      });
       const vulns = await osvQuery(nodes);
       result.hits = attribute(g, vulns);
       result.source = 'osv';
@@ -187,15 +208,6 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
         notes.push(`vulnerability check failed: ${e}`);
       }
     }
-  }
-
-  // 3. registry (updates + deprecations)
-  if (s.enableOutdated) {
-    const names = [...new Set(entries.filter((e) => result.installed.has(e.name) && !SKIP_RANGE.test(e.range)).map((e) => e.name))];
-    await pool(names, 8, async (n) => {
-      const info = await fetchInfo(n, s.registry, { dir: path.dirname(pkgFile), trusted: s.trusted });
-      if (info) result.info.set(n, info);
-    });
   }
   return result;
 }
