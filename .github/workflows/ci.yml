@@ -60,6 +60,20 @@ jobs:
           path: output/vscode/*.vsix
           if-no-files-found: error
 
+  vscode-tests:
+    name: VS Code in-editor tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+          cache-dependency-path: yarn.lock
+      - run: yarn install --frozen-lockfile
+      # Runs inside VS Code at the minimum version in engines.vscode, one window per scenario (see platforms/vscode/scripts/test.js).
+      - run: xvfb-run -a yarn cli vscode test
+
   jetbrains:
     name: JetBrains plugin
     runs-on: ubuntu-latest

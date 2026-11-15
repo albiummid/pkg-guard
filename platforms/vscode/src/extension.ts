@@ -203,7 +203,21 @@ class Fixer implements vscode.CodeActionProvider {
   }
 }
 
-export function activate(ctx: vscode.ExtensionContext): void {
+/** What the in-editor tests (src/test) reach into; the extension itself does not use it. */
+export interface TestApi {
+  states: typeof states;
+  beginScan: typeof beginScan;
+  commitScan: typeof commitScan;
+  cancelScans: typeof cancelScans;
+  settings: typeof settings;
+  tree: PackagesTree;
+  /** what runs when the workspace is granted trust, which a test cannot do from the outside */
+  onTrustGranted: () => void;
+  /** scans the open document at `uri` now */
+  scanOpen: (uri: vscode.Uri) => Promise<void>;
+}
+
+export function activate(ctx: vscode.ExtensionContext): TestApi {
   diagnostics = vscode.languages.createDiagnosticCollection('pkg-guard');
   status = vscode.window.createStatusBarItem('pkgGuard.status', vscode.StatusBarAlignment.Left, 0);
   status.name = 'Pkg Guard';
@@ -242,6 +256,9 @@ export function activate(ctx: vscode.ExtensionContext): void {
     },
   );
 
+  // granting trust turns the audit fallback (and installs) on: results made without it are out of date
+  const onTrustGranted = () => refreshAll(false);
+
   // new advisories are published all the time; without this a window left open never sees them
   let periodic: NodeJS.Timeout | undefined;
   const schedulePeriodic = () => {
@@ -277,7 +294,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
       diagnostics.delete(d.uri);
     }),
     // granting trust turns the audit fallback (and installs) on: results made without it are out of date
-    vscode.workspace.onDidGrantWorkspaceTrust(() => refreshAll(false)),
+    vscode.workspace.onDidGrantWorkspaceTrust(onTrustGranted),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('pkgGuard.refreshIntervalHours')) schedulePeriodic();
       if (e.affectsConfiguration('pkgGuard')) refreshAll(false);
@@ -313,6 +330,16 @@ export function activate(ctx: vscode.ExtensionContext): void {
   ctx.subscriptions.push(watcher);
 
   refreshAll(false);
+  return {
+    states,
+    beginScan,
+    commitScan,
+    cancelScans,
+    settings,
+    tree,
+    onTrustGranted,
+    scanOpen: (uri) => run(vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString())!),
+  };
 }
 
 export function deactivate(): void {

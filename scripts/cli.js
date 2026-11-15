@@ -271,10 +271,10 @@ function runCore(args) {
 
 function runVscode(args) {
   const task = args[0];
-  const usage = 'Usage: yarn cli vscode typecheck|compile|package|install [--profile <name>] [--editor <command>]';
-  if (!['typecheck', 'compile', 'package', 'install'].includes(task)) throw new Error(usage);
+  const usage = 'Usage: yarn cli vscode typecheck|compile|test|package|install [--profile <name>] [--editor <command>]';
+  if (!['typecheck', 'compile', 'test', 'package', 'install'].includes(task)) throw new Error(usage);
   if (task !== 'install') {
-    execSync(`yarn workspace pkg-guard ${task}`, { cwd: root, stdio: 'inherit' });
+    execSync(`yarn workspace pkg-guard ${task}${task === 'test' && args[1] ? ` ${args[1]}` : ''}`, { cwd: root, stdio: 'inherit' });
     return 0;
   }
 
@@ -411,7 +411,7 @@ async function interactive() {
   }
   if (task === 'vscode') {
     const action = await p.select({ message: 'Choose a VS Code task', options: [
-      { value: 'typecheck', label: 'Typecheck extension' }, { value: 'package', label: 'Build VSIX package' },
+      { value: 'typecheck', label: 'Typecheck extension' }, { value: 'test', label: 'Run in-editor tests (downloads VS Code)' }, { value: 'package', label: 'Build VSIX package' },
       { value: 'install', label: 'Build and install in VS Code' },
     ] });
     if (p.isCancel(action)) return p.cancel('Cancelled.');

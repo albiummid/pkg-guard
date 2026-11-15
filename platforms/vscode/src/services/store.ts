@@ -40,7 +40,8 @@ export async function pruneStates(): Promise<void> {
   if (dropped.length) onDidChange.fire();
 }
 
-export function settings(): Settings {
+/** `trusted` is a parameter so a test can see the untrusted result: VS Code never reports an untrusted workspace while extension tests run. */
+export function settings(trusted = vscode.workspace.isTrusted): Settings {
   const c = vscode.workspace.getConfiguration('pkgGuard');
   return {
     enableVulnerabilities: c.get('enableVulnerabilities', true),
@@ -49,7 +50,7 @@ export function settings(): Settings {
     showMajorUpdates: c.get('showMajorUpdates', true),
     checkSync: c.get('checkSync', true),
     minSeverity: c.get('minSeverity', 'low'),
-    auditFallback: c.get('auditFallback', true) && vscode.workspace.isTrusted, // runs yarn/npm audit
+    auditFallback: c.get('auditFallback', true) && trusted, // runs yarn/npm audit
     registry: c.get('registry', 'https://registry.npmjs.org'),
     trusted: vscode.workspace.isTrusted, // a project .npmrc is only read in a trusted workspace
     ignoredAdvisories: c.get('ignoredAdvisories', []),
