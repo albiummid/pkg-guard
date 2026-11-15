@@ -44,7 +44,7 @@ object ProxyEnv {
 
     /** The proxy set in Settings | Appearance & Behavior | System Settings | HTTP Proxy, or null when none (or a SOCKS / PAC one, which Node cannot take from the environment). */
     fun fromIde(): ProxyConfig? {
-        val c = ProxySettings.getInstance().proxyConfiguration as? ProxyConfiguration.StaticProxyConfiguration ?: return null
+        val c = ProxySettings.getInstance().getProxyConfiguration() as? ProxyConfiguration.StaticProxyConfiguration ?: return null
         if (c.protocol != ProxyConfiguration.ProxyProtocol.HTTP) return null
         val host = c.host.trim()
         if (host.isEmpty()) return null
