@@ -587,10 +587,14 @@
     }
   },
   "devDependencies": {
-    "@types/vscode": "1.125.0"
+    "@types/mocha": "^10.0.10",
+    "@types/vscode": "1.125.0",
+    "@vscode/test-electron": "^3.1.0",
+    "mocha": "^12.0.3"
   },
   "scripts": {
     "typecheck": "tsc -p . --noEmit",
+    "test": "node scripts/test.js",
     "compile": "esbuild src/extension.ts --bundle --platform=node --target=node24 --external:vscode --sourcemap --outfile=dist/extension.js",
     "watch": "yarn compile --watch",
     "vscode:prepublish": "yarn typecheck && yarn compile",

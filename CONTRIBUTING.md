@@ -38,6 +38,7 @@ Requirements: Node.js 24, yarn 1.x, and JDK 21 (JetBrains plugin only; the oldes
 yarn install                                         # root CLI and VS Code workspace tools
 yarn cli core test                                   # shared logic + tests
 yarn cli vscode typecheck                           # VS Code extension
+yarn cli vscode test                                # in-editor tests (downloads VS Code, see below)
 yarn cli jetbrains run                              # sandbox IDE with the plugin
 ```
 
@@ -56,9 +57,13 @@ yarn cli build                                      # both (or: yarn cli build v
 2. Branch from `master`: `feat/<short-name>` or `fix/<short-name>`.
 3. Keep the change focused. Match the surrounding style and comment density.
 4. Add or update tests in `src/test/` for logic changes. Run `yarn cli core test`.
-5. Run `yarn cli vscode typecheck` if you touched TypeScript used by the extension.
+5. Run `yarn cli vscode typecheck` if you touched TypeScript used by the extension, and `yarn cli vscode test` if you touched `platforms/vscode/`.
 6. If you touched the sidecar or `src/`, build the JetBrains plugin once to confirm it still bundles.
 7. Update the READMEs when behaviour or settings change. New settings go in `platforms/vscode/package.json`, the JetBrains settings page, and the settings table in `platforms/vscode/README.md`.
+
+### In-editor tests (VS Code)
+
+`yarn cli vscode test [scenario]` downloads the minimum supported VS Code (`engines.vscode`; set `PKG_GUARD_VSCODE_VERSION=stable` to try another) into `platforms/vscode/.vscode-test/` and runs the Mocha suites in `platforms/vscode/src/test/` inside it. Each scenario (`workspace`, `empty`, `lone`) is its own VS Code window on a throwaway workspace, because the folder and the first activation event cannot change in a running window. VS Code treats every workspace as trusted while extension tests run, so the untrusted behaviour is checked at its seams: the restricted settings declared in the manifest and `settings(false)`. The scans stay offline. On Linux without a display, wrap it in `xvfb-run -a`. `extension.ts` returns a `TestApi` from `activate` for the tests; the extension itself does not use it.
 
 ### Versions
 
