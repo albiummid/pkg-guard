@@ -42,6 +42,10 @@ class PkgGuardService(private val project: Project) : Disposable {
 
     /** Import warnings per JS/TS file path, for the end-of-line text. */
     val importStates = ConcurrentHashMap<String, List<ImportFinding>>()
+
+    /** Drops the import state of the files at [paths] and of everything below them (a deleted or moved folder). */
+    fun forgetImportStates(paths: Collection<String>) = dropImportStates(importStates, paths)
+
     val sidecar: Sidecar get() = project.service()
     val settings: PkgGuardSettings get() = project.service()
 
