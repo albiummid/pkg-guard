@@ -54,3 +54,13 @@ export function createScanLedger<T>(): ScanLedger<T> {
   };
   return ledger;
 }
+
+/**
+ * Drops the results of keys whose file is gone. A key in `keep` (open in an editor) is never dropped and never checked; every other key
+ * is dropped when `exists` says false. Returns the keys dropped.
+ */
+export async function pruneMissing<T>(ledger: ScanLedger<T>, keep: ReadonlySet<string>, exists: (key: string) => Promise<boolean>): Promise<string[]> {
+  const gone = new Set<string>();
+  await Promise.all([...ledger.states.keys()].filter((k) => !keep.has(k)).map(async (k) => { if (!(await exists(k))) gone.add(k); }));
+  return ledger.retain((k) => !gone.has(k));
+}

@@ -5,7 +5,7 @@ import { buildFindings } from '@core/analysis/findings';
 import { Finding, ScanResult, Settings } from '@core/types';
 import { scan } from '@core/analysis/scan';
 import { NpmrcScope } from '@core/sources/npmrc';
-import { createScanLedger } from '@core/analysis/scanLedger';
+import { createScanLedger, pruneMissing } from '@core/analysis/scanLedger';
 
 export interface State {
   /** document version the scan was made from; -1 when scanned from disk */
@@ -32,11 +32,7 @@ export const cancelScans = ledger.cancel;
  */
 export async function pruneStates(): Promise<void> {
   const open = new Set(vscode.workspace.textDocuments.map((d) => d.uri.toString()));
-  const gone = new Set<string>();
-  await Promise.all(
-    [...states.keys()].filter((k) => !open.has(k)).map((k) => fs.promises.access(vscode.Uri.parse(k).fsPath).catch(() => void gone.add(k))),
-  );
-  const dropped = ledger.retain((k) => !gone.has(k));
+  const dropped = await pruneMissing(ledger, open, (k) => fs.promises.access(vscode.Uri.parse(k).fsPath).then(() => true, () => false));
   if (dropped.length) onDidChange.fire();
 }
 

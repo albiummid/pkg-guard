@@ -564,3 +564,10 @@ test('yarn berry graph resolves ranges, aliases and each workspace member from i
   const hits = attribute(api, new Map([['body-parser@2.0.2', [{ pkg: 'body-parser', version: '2.0.2' } as any]]]));
   assert.equal(hits[0].root, 'express');
 });
+
+test('a Pin for a bun project goes to overrides', () => {
+  const r = transitive({ qs: ['6.0.0'] }, { pm: { name: 'bun', installCmd: 'bun install', overrideSection: 'overrides' }, lock: 'bun' });
+  const pin = buildFindings(r, settings).find((x) => x.kind === 'transitive')!.fixes.find((x) => x.type === 'addOverride')!;
+  assert.equal((pin as any).section, 'overrides');
+  assert.match(pin.title, /via overrides/);
+});

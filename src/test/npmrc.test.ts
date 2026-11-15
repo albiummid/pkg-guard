@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'fs';
+import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import { clearRegistryCache, fetchInfo } from '../sources/registry';
@@ -125,4 +126,29 @@ test('npmrc: credentials match a registry by path prefix and the default registr
     assert.equal(resolveRegistry('x', 'https://custom.example/').registry, 'https://custom.example/');
     assert.equal(resolveRegistry('x', 'https://custom.example/').authorization, undefined);
   });
+});
+
+test('npmrc: a redirect to another origin does not carry the registry credentials', async () => {
+  const seen: { host: string; auth?: string }[] = [];
+  const serve = (handler: (res: http.ServerResponse) => void) => new Promise<http.Server>((resolve) => {
+    const s = http.createServer((req, res) => { seen.push({ host: String(req.headers.host), auth: req.headers.authorization }); handler(res); });
+    s.listen(0, '127.0.0.1', () => resolve(s));
+  });
+  const target = await serve((res) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(doc)); });
+  const targetPort = (target.address() as import('net').AddressInfo).port;
+  const origin = await serve((res) => { res.statusCode = 302; res.setHeader('location', `http://127.0.0.1:${targetPort}/redirected`); res.end(); });
+  const originPort = (origin.address() as import('net').AddressInfo).port;
+  const registry = `http://127.0.0.1:${originPort}/`;
+  try {
+    await withNpmrc(`//127.0.0.1:${originPort}/:_authToken=sekret
+`, '', async (dir) => {
+      assert.equal((await fetchInfo('x', registry, { dir, trusted: true }))?.latest, '1.0.0');
+    });
+  } finally {
+    origin.close();
+    target.close();
+  }
+  assert.equal(seen.length, 2);
+  assert.equal(seen[0].auth, 'Bearer sekret');
+  assert.equal(seen[1].auth, undefined);
 });

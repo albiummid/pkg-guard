@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createScanLedger } from '../analysis/scanLedger';
+import { createScanLedger, pruneMissing } from '../analysis/scanLedger';
 
 test('scan ledger: an older scan never replaces a newer result', () => {
   const l = createScanLedger<string>();
@@ -40,4 +40,14 @@ test('scan ledger: cancel drops running scans but keeps the stored result', () =
   l.cancel('/a');
   assert.equal(l.commit('/a', running, 'late'), false);
   assert.equal(l.states.get('/a'), 'v1');
+});
+
+test('pruneMissing keeps manifests that exist or are open and drops the deleted ones', async () => {
+  const l = createScanLedger<string>();
+  for (const k of ['/present', '/open-but-unsaved', '/deleted']) l.commit(k, l.begin(k), k);
+  const checked: string[] = [];
+  const dropped = await pruneMissing(l, new Set(['/open-but-unsaved']), async (k) => { checked.push(k); return k === '/present'; });
+  assert.deepEqual(dropped, ['/deleted']);
+  assert.deepEqual([...l.states.keys()].sort(), ['/open-but-unsaved', '/present']);
+  assert.deepEqual(checked.sort(), ['/deleted', '/present']);
 });
