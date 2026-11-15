@@ -15,6 +15,8 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 - JetBrains: a status bar widget shows how many dependencies are vulnerable and how many updates are available (the tooltip names the data source); clicking it re-scans with fresh advisory and registry data.
 - JetBrains: a project without a `package.json` shows "No package.json found" and what Pkg Guard needs in the tool window, instead of an empty tree; it never shows while existing manifests are still being scanned.
 
+- JetBrains: the scanner uses the IDE's HTTP proxy settings for advisory and registry requests (manual HTTP proxy; credentials are never logged). VS Code uses the editor proxy.
+
 ### Fixes
 
 - JetBrains: "Add dependency…" reports a failed registry lookup (network, registry error) separately from a package that does not exist, and no longer fails on a package that has deprecated versions.

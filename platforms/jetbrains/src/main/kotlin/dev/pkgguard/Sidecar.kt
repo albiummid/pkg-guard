@@ -72,7 +72,7 @@ class Sidecar(private val project: Project) : Disposable {
             throw IllegalStateException("Pkg Guard needs Node.js $MIN_NODE_MAJOR or newer, but \"$node\" is version $major. Install a newer Node or set its path in Settings | Tools | Pkg Guard.")
         }
         return try {
-            GeneralCommandLine(node, ScannerScript.path().toString()).withCharset(UTF_8).createProcess()
+            GeneralCommandLine(node, ScannerScript.path().toString()).withCharset(UTF_8).withEnvironment(ProxyEnv.variables(ProxyEnv.fromIde())).createProcess()
         } catch (e: Exception) {
             throw IllegalStateException("Could not start Node.js (\"$node\"). Install Node $MIN_NODE_MAJOR+ or set its path in Settings | Tools | Pkg Guard. ${e.message}", e)
         }
