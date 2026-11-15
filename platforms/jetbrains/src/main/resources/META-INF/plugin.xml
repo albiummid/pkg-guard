@@ -27,6 +27,10 @@
     <listener class="dev.pkgguard.PkgGuardFileListener" topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
   </applicationListeners>
 
+  <projectListeners>
+    <listener class="dev.pkgguard.ImportStateCloseListener" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+  </projectListeners>
+
   <actions>
     <action id="dev.pkgguard.Rescan" class="dev.pkgguard.RescanAction" text="Pkg Guard: Re-scan" description="Clear the advisory and registry caches and re-scan every package.json">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
