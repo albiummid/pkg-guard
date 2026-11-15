@@ -46,7 +46,7 @@ const doc = { 'dist-tags': { latest: '1.0.0' }, versions: { '1.0.0': {} } };
 test('npmrc: a scoped package goes to the registry its scope maps to, with that registry\'s token only', async () => {
   await withNpmrc('@corp:registry=https://npm.corp.example/repo/\n//npm.corp.example/repo/:_authToken=sekret\n', '', async (dir) => {
     const seen: { url: string; auth?: string }[] = [];
-    await withFetch((url, init) => (seen.push({ url, auth: init?.headers?.authorization }), json(doc)), async () => {
+    await withFetch((url, init) => { seen.push({ url, auth: init?.headers?.authorization }); return json(doc); }, async () => {
       assert.equal((await fetchInfo('@corp/lib', PUBLIC, { dir, trusted: true }))!.latest, '1.0.0');
       await fetchInfo('left-pad', PUBLIC, { dir, trusted: true });
       await fetchMeta('@corp/lib', PUBLIC, { dir, trusted: true });
@@ -60,7 +60,7 @@ test('npmrc: a scoped package goes to the registry its scope maps to, with that 
 test('npmrc: credentials never reach OSV.dev or a registry they do not belong to', async () => {
   await withNpmrc('//other.example/:_authToken=other\n@corp:registry=https://npm.corp.example/\n//npm.corp.example/:_auth=dTpw\n', '', async (dir) => {
     const seen: { url: string; auth?: string }[] = [];
-    await withFetch((url, init) => (seen.push({ url, auth: init?.headers?.authorization }), json({ results: [] })), async () => {
+    await withFetch((url, init) => { seen.push({ url, auth: init?.headers?.authorization }); return json({ results: [] }); }, async () => {
       await osvQuery([{ name: 'a', version: '1.0.0' }]);
       await fetchInfo('plain', PUBLIC, { dir, trusted: true });
       await fetchInfo('@corp/x', PUBLIC, { dir, trusted: true });
@@ -88,7 +88,7 @@ test('npmrc: an untrusted workspace ignores the project .npmrc, a trusted one ho
 test('npmrc: a private scope is never looked up on the public registry', async () => {
   await withNpmrc('@corp:registry=not a url\n', '', async (dir) => {
     let calls = 0;
-    await withFetch(() => (calls++, json(doc)), async () => {
+    await withFetch(() => { calls++; return json(doc); }, async () => {
       assert.equal(await fetchInfo('@corp/lib', PUBLIC, { dir, trusted: true }), null);
       assert.equal(await fetchMeta('@corp/lib', PUBLIC, { dir, trusted: true }), null);
     });
@@ -97,16 +97,18 @@ test('npmrc: a private scope is never looked up on the public registry', async (
   // a rejected request (no usable credentials) stays a failure rather than retrying elsewhere
   await withNpmrc('@corp:registry=https://npm.corp.example/\n', '', async (dir) => {
     const urls: string[] = [];
-    await withFetch((url) => (urls.push(url), json({}, 401)), async () => {
+    await withFetch((url) => { urls.push(url); return json({}, 401); }, async () => {
       assert.equal(await fetchInfo('@corp/lib', PUBLIC, { dir, trusted: true }), null);
     });
     assert.deepEqual(urls, ['https://npm.corp.example/@corp%2flib']);
   });
 });
 
+// biome-ignore lint/suspicious/noTemplateCurlyInString: literal npmrc syntax
 test('npmrc: ${VAR} in values is expanded and an unset variable drops the entry', async () => {
   process.env.PKG_GUARD_TEST_TOKEN = 'fromenv';
   try {
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal npmrc syntax
     await withNpmrc('//r.example/:_authToken=${PKG_GUARD_TEST_TOKEN}\n//s.example/:_authToken=${PKG_GUARD_UNSET_VAR}\n', '', async () => {
       assert.equal(resolveRegistry('x', 'https://r.example/').authorization, 'Bearer fromenv');
       assert.equal(resolveRegistry('x', 'https://s.example/').authorization, undefined);
