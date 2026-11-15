@@ -54,6 +54,7 @@ class PkgGuardSettings : PersistentStateComponent<PkgGuardSettings.State> {
         "minSeverity" to state.minSeverity,
         "auditFallback" to (state.auditFallback && ProjectTrust.isTrusted(project)),
         "registry" to state.registry,
+        "trusted" to ProjectTrust.isTrusted(project),
         "ignoredAdvisories" to state.ignoredAdvisories,
         "ignoredPackages" to state.ignoredPackages,
     )
