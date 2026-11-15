@@ -52,7 +52,7 @@ export function settings(trusted = vscode.workspace.isTrusted): Settings {
     minSeverity: c.get('minSeverity', 'low'),
     auditFallback: c.get('auditFallback', true) && trusted, // runs yarn/npm audit
     registry: c.get('registry', 'https://registry.npmjs.org'),
-    trusted: vscode.workspace.isTrusted, // a project .npmrc is only read in a trusted workspace
+    trusted, // a project .npmrc is only read in a trusted workspace
     ignoredAdvisories: c.get('ignoredAdvisories', []),
     ignoredPackages: c.get('ignoredPackages', []),
   };
