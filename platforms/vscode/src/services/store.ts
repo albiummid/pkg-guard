@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { buildFindings } from '@core/analysis/findings';
 import { Finding, ScanResult, Settings } from '@core/types';
 import { scan } from '@core/analysis/scan';
+import { createScanLedger } from '@core/analysis/scanLedger';
 
 export interface State {
   /** document version the scan was made from; -1 when scanned from disk */
@@ -11,32 +12,30 @@ export interface State {
   findings: Finding[];
 }
 
-export const states = new Map<string, State>();
+const ledger = createScanLedger<State>();
+export const states = ledger.states;
 export const onDidChange = new vscode.EventEmitter<void>();
 export const output = vscode.window.createOutputChannel('Pkg Guard');
 
 const pending = new Map<string, Promise<State | undefined>>();
-const started = new Map<string, number>();
-const committed = new Map<string, number>();
 
 /** Numbers a scan of `key` when it starts. Editor scans and sidebar scans of the same file share this order. */
-export function beginScan(key: string): number {
-  const n = (started.get(key) ?? 0) + 1;
-  started.set(key, n);
-  return n;
-}
+export const beginScan = ledger.begin;
+export const commitScan = ledger.commit;
+export const cancelScans = ledger.cancel;
 
-/** Stores the result unless a scan that started later has already stored its own: an older result never replaces a newer one. */
-export function commitScan(key: string, seq: number, st: State): boolean {
-  if (seq < (committed.get(key) ?? 0)) return false;
-  committed.set(key, seq);
-  states.set(key, st);
-  return true;
-}
-
-/** Drops every scan of `key` that is still running (a closed document must not get its diagnostics back). */
-export function cancelScans(key: string): void {
-  committed.set(key, beginScan(key));
+/**
+ * Forgets the scan state of package.jsons that no longer exist on disk (deleted or renamed). A manifest that is open in an editor, or
+ * that still exists, keeps its state, so nothing the sidebar still shows disappears. Tells the views when something was dropped.
+ */
+export async function pruneStates(): Promise<void> {
+  const open = new Set(vscode.workspace.textDocuments.map((d) => d.uri.toString()));
+  const gone = new Set<string>();
+  await Promise.all(
+    [...states.keys()].filter((k) => !open.has(k)).map((k) => fs.promises.access(vscode.Uri.parse(k).fsPath).catch(() => void gone.add(k))),
+  );
+  const dropped = ledger.retain((k) => !gone.has(k));
+  if (dropped.length) onDidChange.fire();
 }
 
 export function settings(): Settings {

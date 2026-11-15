@@ -7,7 +7,7 @@ import { install, offerInstall } from './services/install';
 import { clearOsvCache } from '@core/sources/osv';
 import { clearRegistryCache } from '@core/sources/registry';
 import { scan } from '@core/analysis/scan';
-import { beginScan, cancelScans, commitScan, findProjects, onDidChange, output, scanUri, settings, states } from './services/store';
+import { beginScan, cancelScans, commitScan, findProjects, onDidChange, output, pruneStates, scanUri, settings, states } from './services/store';
 import { PackagesTree } from './views/tree';
 import { registerImportWarnings } from './views/imports';
 
@@ -224,6 +224,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
       schedule(d, 0);
     }
     // projects whose package.json is not open are scanned from disk for the sidebar
+    void pruneStates();
     void findProjects().then((files) => files.filter((u) => !open.has(u.toString())).forEach((u) => void scanUri(u)));
     tree.refresh();
   };
