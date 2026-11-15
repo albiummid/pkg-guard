@@ -33,6 +33,6 @@ class ImportStatesTest {
         assertFalse(dropImportStates(s, listOf("/p/none.ts")))
         dropImportStates(s, listOf("/p/src/a.ts"))
         s["/p/src/a.ts"] = emptyList()
-        assertTrue("/p/src/a.ts" in s)
+        assertTrue(s.containsKey("/p/src/a.ts"))
     }
 }
