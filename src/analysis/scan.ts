@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { attribute, runAudit } from '../sources/audit';
-import { buildNpmGraph, buildYarnGraph } from '../sources/lockfile';
+import { buildBunGraph, buildNpmGraph, buildYarnGraph } from '../sources/lockfile';
 import { osvQuery } from '../sources/osv';
 import { locateDeps } from '../manifest/packageJson';
 import { fetchInfo } from '../sources/registry';
@@ -13,10 +13,10 @@ import { DepEntry, PackageManager, RegistryInfo, ScanResult, Settings } from '..
 export const SKIP_RANGE = /^(workspace:|file:|link:|git|http|npm:|github:|portal:|patch:|catalog:)|\//;
 
 /** Lockfile names in the order the package manager is detected (see detectPm), with the manager each belongs to. */
-const LOCKFILES: { file: string; pm: PackageManager['name']; readable: 'yarn' | 'npm' | null }[] = [
+const LOCKFILES: { file: string; pm: PackageManager['name']; readable: 'yarn' | 'npm' | 'bun' | null }[] = [
   { file: 'pnpm-lock.yaml', pm: 'pnpm', readable: null },
   { file: 'yarn.lock', pm: 'yarn', readable: 'yarn' },
-  { file: 'bun.lock', pm: 'bun', readable: null },
+  { file: 'bun.lock', pm: 'bun', readable: 'bun' },
   { file: 'bun.lockb', pm: 'bun', readable: null },
   { file: 'package-lock.json', pm: 'npm', readable: 'npm' },
   { file: 'npm-shrinkwrap.json', pm: 'npm', readable: 'npm' },
@@ -25,7 +25,7 @@ const LOCKFILES: { file: string; pm: PackageManager['name']; readable: 'yarn' | 
 const exists = (p: string): Promise<boolean> => fs.promises.access(p).then(() => true, () => false);
 
 /** The nearest lockfile of any package manager. `kind` is null for the ones this tool cannot read. */
-async function findLock(dir: string): Promise<{ file: string; kind: 'yarn' | 'npm' | null; pm: PackageManager['name'] } | null> {
+async function findLock(dir: string): Promise<{ file: string; kind: 'yarn' | 'npm' | 'bun' | null; pm: PackageManager['name'] } | null> {
   for (let d = dir; ; d = path.dirname(d)) {
     for (const l of LOCKFILES) {
       if (await exists(path.join(d, l.file))) return { file: path.join(d, l.file), kind: l.readable, pm: l.pm };
@@ -116,11 +116,12 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
   if (lock && lock.pm !== result.pm.name) {
     notes.push(`${path.basename(lock.file)} belongs to ${lock.pm}, not ${result.pm.name}; it was ignored and transitive vulnerability checks are off`);
   } else if (lock && !lock.kind) {
-    notes.push(`${path.basename(lock.file)} is not supported yet; transitive vulnerability checks are off`);
+    notes.push(`${path.basename(lock.file)} is not supported yet (it is a binary file; "bun install --save-text-lockfile" writes a bun.lock); transitive vulnerability checks are off`);
   } else if (lock) {
     try {
       const text = await fs.promises.readFile(lock.file, 'utf8');
       if (lock.kind === 'yarn') graph = buildYarnGraph(text, rootDeps);
+      else if (lock.kind === 'bun') graph = buildBunGraph(text, rootDeps);
       else {
         // a workspace member resolves its own nested copies before the root's
         const rel = path.relative(path.dirname(lock.file), dir).split(path.sep).join('/');
@@ -129,7 +130,7 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
     } catch (e) {
       notes.push(`could not read lockfile: ${e}`);
     }
-    if (!graph) notes.push('lockfile format not supported (yarn berry / package-lock v1?); transitive checks disabled');
+    if (!graph) notes.push('lockfile format not supported (yarn berry / package-lock v1 / bun.lock?); transitive checks disabled');
   }
   const g: Graph = graph ?? { kind: 'none', nodes: new Map(), roots: new Map() };
   result.lock = g.kind;

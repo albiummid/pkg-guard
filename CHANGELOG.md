@@ -8,6 +8,7 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 
 ### New Feature
 
+- A project with a `bun.lock` gets Transitive vulnerability checks, attributed to the direct dependency that pulls them in; the binary `bun.lockb` is still not supported and keeps its scan note. A Pin goes to `overrides`, which bun reads.
 - JetBrains: each project in the tool window has a "Needs attention (n)" group on top listing the dependencies with a vulnerability, transitive vulnerability, deprecation or out-of-sync install, with the same actions as the dependencies below; it is hidden when nothing needs attention.
 - JetBrains: a version under a dependency offers "Changelog: installed to this" and "Changelog: this version only", opening the release notes in the changelog viewer with their source named (the npm page when the package has no repository).
 - JetBrains: a project's menu in the tool window has "Fix vulnerabilities": after a confirmation that lists them, it updates vulnerable dependencies (in every section that declares them) and pins Transitive vulnerabilities in the workspace root's `package.json`, then offers the install once.
