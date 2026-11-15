@@ -1,6 +1,6 @@
 package dev.pkgguard
 
-// JSON shapes of the Node sidecar (src/server.ts). Optional fields are nullable because Gson leaves missing ones null.
+// JSON shapes of the Node sidecar (src/server.ts). The TypeScript types in src/types are the source of truth; src/test/protocol.test.ts fails when this file disagrees with them. Optional fields are nullable because Gson leaves missing ones null.
 
 data class Entry(
     val name: String,
