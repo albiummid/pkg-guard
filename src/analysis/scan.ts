@@ -193,17 +193,26 @@ export async function scan(text: string, pkgFile: string, s: Settings, opts: Sca
     try {
       let nodes: Pkg[] = [...g.nodes.values()];
       if (!s.checkTransitive || g.kind === 'none') nodes = [...g.roots.values()].map((id) => g.nodes.get(id)!);
-      // Nothing installed: every published version the range allows is checked, not only the Floor version. Those come from the
-      // registry data fetched above for Updates; without it (update checks off, registry unreachable) only the Floor version is.
+      // Nothing installed: every Allowed version is checked, not only the Floor version. Those come from the registry data fetched
+      // above for available Updates; without it (update checks off, no registry data) only the Floor version is, as a plain query.
+      const floorOnly = new Map<string, string[]>();
       nodes = nodes.map((n) => {
         const range = floorRanges.get(n.name);
         if (!range || g.roots.get(n.name) !== `${n.name}@${n.version}`) return n;
-        const allowed = (result.info.get(n.name)?.versions ?? []).filter((v) => satisfies(v, range));
-        return { ...n, allowed: allowed.length ? allowed : [n.version] };
+        const info = result.info.get(n.name);
+        const allowed = (info?.versions ?? []).filter((v) => satisfies(v, range));
+        if (allowed.length) return { ...n, allowed };
+        const why = !s.enableOutdated ? 'update checks are off' : !info ? 'no registry data' : 'the registry lists no version the range allows';
+        floorOnly.set(why, [...(floorOnly.get(why) ?? []), n.name]);
+        return n;
       });
       const vulns = await osvQuery(nodes);
       result.hits = attribute(g, vulns);
       result.source = 'osv';
+      for (const [why, names] of floorOnly) {
+        const one = names.length === 1;
+        notes.push(`only the lowest version of the range was checked for ${names.length} ${one ? 'dependency' : 'dependencies'} with nothing installed (${why}); later versions ${one ? 'its range allows' : 'their ranges allow'} were not checked: ${names.join(', ')}`);
+      }
     } catch (e) {
       if (s.auditFallback && (g.kind === 'yarn' || g.kind === 'npm')) {
         try {

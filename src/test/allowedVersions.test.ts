@@ -187,3 +187,37 @@ test('a malware record whose details cannot be fetched is reported as critical b
   assert.equal(f.level, 'error');
   assert.match(f.message, /\(1 critical\)/);
 });
+
+/** An Advisory on the Floor version of ^1.0.0 and one on a later Allowed version only. */
+const FLOOR_AND_LATER = [
+  { id: 'GHSA-floor', affected: range([{ introduced: '0' }, { fixed: '1.1.0' }]) },
+  { id: 'MAL-later', affected: range([{ introduced: '1.2.0' }, { fixed: '1.3.0' }]) },
+];
+
+/** Asserts the scan checked only the Floor version, exactly as before Allowed versions: one query with the version, details only for what it returned. */
+function assertFloorOnly(res: Awaited<ReturnType<typeof scanFloor>>, why: RegExp) {
+  assert.deepEqual(res.queries, [{ package: { name: 'p', ecosystem: 'npm' }, version: '1.0.0' }]);
+  assert.deepEqual(res.details, ['GHSA-floor']);
+  const f = res.findings.find((x) => x.kind === 'vuln')!;
+  assert.equal(f.code, 'GHSA-floor');
+  assert.match(f.message, /^p@1\.0\.0 may be vulnerable \(version guessed from \^1\.0\.0\): 1 known vulnerability/);
+  const note = res.r.notes.find((n) => n.startsWith('only the lowest version'));
+  assert.ok(note, 'expected a note on the versions not checked');
+  assert.match(note, why);
+  assert.match(note, /later versions its range allows were not checked: p$/);
+}
+
+test('with update checks off only the Floor version is checked, and a note says why', async () => {
+  const res = await scanFloor('^1.0.0', FLOOR_AND_LATER, { settings: { enableOutdated: false } });
+  assertFloorOnly(res, /\(update checks are off\)/);
+});
+
+test('with no registry data only the Floor version is checked, and a note says why', async () => {
+  const res = await scanFloor('^1.0.0', FLOOR_AND_LATER, { noRegistry: true });
+  assertFloorOnly(res, /\(no registry data\)/);
+});
+
+test('with the Allowed versions known, no note about unchecked versions is added', async () => {
+  const { r } = await scanFloor('^1.0.0', FLOOR_AND_LATER);
+  assert.equal(r.notes.filter((n) => n.startsWith('only the lowest version')).length, 0);
+});
