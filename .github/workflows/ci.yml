@@ -28,7 +28,7 @@ jobs:
       - run: node scripts/cli.js changelog --check
 
   core:
-    name: Core tests
+    name: Core lint and tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +38,7 @@ jobs:
           cache: yarn
           cache-dependency-path: yarn.lock
       - run: yarn install --frozen-lockfile
+      - run: yarn cli core lint
       - run: yarn cli core test
 
   vscode:

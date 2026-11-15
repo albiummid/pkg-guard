@@ -14,6 +14,7 @@
     "cli": "node scripts/cli.js"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.6.7",
     "@clack/prompts": "^1.8.1",
     "@types/node": "24",
     "@vscode/vsce": "^4.0.0",

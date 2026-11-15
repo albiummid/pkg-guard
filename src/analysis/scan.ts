@@ -8,8 +8,8 @@ import { locateDeps } from '../manifest/packageJson';
 import { fetchInfo } from '../sources/registry';
 import { baseVersion } from '../versions/semver';
 import { detectPm } from '../manifest/packageManager';
-import { Graph, Hit } from '../types/index';
-import { DepEntry, PackageManager, RegistryInfo, ScanResult, Settings } from '../types';
+import { Graph, } from '../types/index';
+import { PackageManager, ScanResult, Settings } from '../types';
 
 export const SKIP_RANGE = /^(workspace:|file:|link:|git|http|npm:|github:|portal:|patch:|catalog:)|\//;
 

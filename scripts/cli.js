@@ -250,6 +250,12 @@ function runCore(args) {
     run(['--test', ...testFiles]);
     return 0;
   }
+  if (task === 'lint') {
+    // Covers the shared core (src/) and the VS Code extension; rules live in biome.json. Warnings fail too.
+    const biome = path.resolve(path.dirname(require.resolve('@biomejs/biome/package.json')), 'bin/biome');
+    run([biome, 'lint', '--error-on-warnings', '.']);
+    return 0;
+  }
   if (task === 'build:server') {
     require('esbuild').buildSync({
       entryPoints: [path.join(core, 'src/server.ts')],
@@ -260,7 +266,7 @@ function runCore(args) {
     });
     return 0;
   }
-  throw new Error('Usage: yarn cli core compile|watch|build:server|test');
+  throw new Error('Usage: yarn cli core compile|watch|build:server|test|lint');
 }
 
 function runVscode(args) {
@@ -397,7 +403,7 @@ async function interactive() {
   if (task === 'changelog') return manageChangelog(['--check']);
   if (task === 'core') {
     const action = await p.select({ message: 'Choose a core task', options: [
-      { value: 'test', label: 'Run core tests' }, { value: 'build:server', label: 'Build Node sidecar' },
+      { value: 'test', label: 'Run core tests' }, { value: 'lint', label: 'Lint TypeScript' }, { value: 'build:server', label: 'Build Node sidecar' },
       { value: 'compile', label: 'Compile TypeScript' }, { value: 'watch', label: 'Watch TypeScript' },
     ] });
     if (p.isCancel(action)) return p.cancel('Cancelled.');
