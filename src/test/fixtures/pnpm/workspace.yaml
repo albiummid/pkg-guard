@@ -1,0 +1,54 @@
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    devDependencies:
+      typescript:
+        specifier: ^5.0.0
+        version: 5.4.5
+
+  packages/api:
+    dependencies:
+      express:
+        specifier: ^4.17.0
+        version: 4.17.1
+
+  packages/web:
+    dependencies:
+      express:
+        specifier: ^4.18.0
+        version: 4.18.2
+
+packages:
+
+  express@4.17.1:
+    resolution: {integrity: sha512-bbb}
+
+  express@4.18.2:
+    resolution: {integrity: sha512-bbb2}
+
+  qs@6.7.0:
+    resolution: {integrity: sha512-ddd}
+
+  qs@6.11.0:
+    resolution: {integrity: sha512-ddd2}
+
+  typescript@5.4.5:
+    resolution: {integrity: sha512-ttt}
+
+snapshots:
+
+  express@4.17.1:
+    dependencies:
+      qs: 6.7.0
+
+  express@4.18.2:
+    dependencies:
+      qs: 6.11.0
+
+  qs@6.7.0: {}
+
+  qs@6.11.0: {}
+
+  typescript@5.4.5: {}

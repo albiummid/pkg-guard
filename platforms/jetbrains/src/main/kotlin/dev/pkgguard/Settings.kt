@@ -54,6 +54,7 @@ class PkgGuardSettings : PersistentStateComponent<PkgGuardSettings.State> {
         "minSeverity" to state.minSeverity,
         "auditFallback" to (state.auditFallback && ProjectTrust.isTrusted(project)),
         "registry" to state.registry,
+        "trusted" to ProjectTrust.isTrusted(project),
         "ignoredAdvisories" to state.ignoredAdvisories,
         "ignoredPackages" to state.ignoredPackages,
     )
@@ -73,7 +74,7 @@ class PkgGuardConfigurable(private val project: Project) : BoundConfigurable("Pk
             }
             group("Checks") {
                 row { checkBox("Report known vulnerabilities (OSV.dev)").bindSelected(s::enableVulnerabilities) }
-                row { checkBox("Include transitive dependencies (yarn.lock v1 / package-lock.json)").bindSelected(s::checkTransitive) }
+                row { checkBox("Include transitive dependencies (yarn.lock / package-lock.json / pnpm-lock.yaml / bun.lock)").bindSelected(s::checkTransitive) }
                 row { checkBox("Show vulnerability warnings on imports in JS / TS files").bindSelected(s::importWarnings) }
                 row { checkBox("Suggest newer versions from the registry").bindSelected(s::enableOutdated) }
                 row { checkBox("Also suggest updates that cross a major version").bindSelected(s::showMajorUpdates) }

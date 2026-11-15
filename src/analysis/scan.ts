@@ -1,22 +1,23 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { attribute, runAudit } from '../sources/audit';
-import { buildNpmGraph, buildYarnGraph } from '../sources/lockfile';
+import { buildBunGraph, buildNpmGraph, buildYarnGraph } from '../sources/lockfile';
+import { buildPnpmGraph } from '../sources/pnpmLock';
 import { osvQuery } from '../sources/osv';
 import { locateDeps } from '../manifest/packageJson';
 import { fetchInfo } from '../sources/registry';
 import { baseVersion } from '../versions/semver';
 import { detectPm } from '../manifest/packageManager';
-import { Graph, Hit } from '../types/index';
-import { DepEntry, PackageManager, RegistryInfo, ScanResult, Settings } from '../types';
+import { Graph, LockKind } from '../types/index';
+import { PackageManager, ScanResult, Settings } from '../types';
 
 export const SKIP_RANGE = /^(workspace:|file:|link:|git|http|npm:|github:|portal:|patch:|catalog:)|\//;
 
 /** Lockfile names in the order the package manager is detected (see detectPm), with the manager each belongs to. */
-const LOCKFILES: { file: string; pm: PackageManager['name']; readable: 'yarn' | 'npm' | null }[] = [
-  { file: 'pnpm-lock.yaml', pm: 'pnpm', readable: null },
+const LOCKFILES: { file: string; pm: PackageManager['name']; readable: LockKind | null }[] = [
+  { file: 'pnpm-lock.yaml', pm: 'pnpm', readable: 'pnpm' },
   { file: 'yarn.lock', pm: 'yarn', readable: 'yarn' },
-  { file: 'bun.lock', pm: 'bun', readable: null },
+  { file: 'bun.lock', pm: 'bun', readable: 'bun' },
   { file: 'bun.lockb', pm: 'bun', readable: null },
   { file: 'package-lock.json', pm: 'npm', readable: 'npm' },
   { file: 'npm-shrinkwrap.json', pm: 'npm', readable: 'npm' },
@@ -25,7 +26,7 @@ const LOCKFILES: { file: string; pm: PackageManager['name']; readable: 'yarn' | 
 const exists = (p: string): Promise<boolean> => fs.promises.access(p).then(() => true, () => false);
 
 /** The nearest lockfile of any package manager. `kind` is null for the ones this tool cannot read. */
-async function findLock(dir: string): Promise<{ file: string; kind: 'yarn' | 'npm' | null; pm: PackageManager['name'] } | null> {
+async function findLock(dir: string): Promise<{ file: string; kind: LockKind | null; pm: PackageManager['name'] } | null> {
   for (let d = dir; ; d = path.dirname(d)) {
     for (const l of LOCKFILES) {
       if (await exists(path.join(d, l.file))) return { file: path.join(d, l.file), kind: l.readable, pm: l.pm };
@@ -116,20 +117,22 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
   if (lock && lock.pm !== result.pm.name) {
     notes.push(`${path.basename(lock.file)} belongs to ${lock.pm}, not ${result.pm.name}; it was ignored and transitive vulnerability checks are off`);
   } else if (lock && !lock.kind) {
-    notes.push(`${path.basename(lock.file)} is not supported yet; transitive vulnerability checks are off`);
+    notes.push(`${path.basename(lock.file)} is not supported yet (it is a binary file; "bun install --save-text-lockfile" writes a bun.lock); transitive vulnerability checks are off`);
   } else if (lock) {
     try {
       const text = await fs.promises.readFile(lock.file, 'utf8');
-      if (lock.kind === 'yarn') graph = buildYarnGraph(text, rootDeps);
-      else {
-        // a workspace member resolves its own nested copies before the root's
-        const rel = path.relative(path.dirname(lock.file), dir).split(path.sep).join('/');
-        graph = buildNpmGraph(JSON.parse(text), rootDeps, rel.startsWith('..') ? '' : rel);
-      }
+      // a workspace member resolves its own entry (yarn berry, pnpm importer) or nested copies (npm) before the root's
+      const rel = path.relative(path.dirname(lock.file), dir).split(path.sep).join('/');
+      const member = rel.startsWith('..') ? '' : rel;
+      graph =
+        lock.kind === 'yarn' ? buildYarnGraph(text, rootDeps, member)
+        : lock.kind === 'pnpm' ? buildPnpmGraph(text, rootDeps, member || '.')
+        : lock.kind === 'bun' ? buildBunGraph(text, rootDeps)
+        : buildNpmGraph(JSON.parse(text), rootDeps, member);
     } catch (e) {
       notes.push(`could not read lockfile: ${e}`);
     }
-    if (!graph) notes.push('lockfile format not supported (yarn berry / package-lock v1?); transitive checks disabled');
+    if (!graph) notes.push('lockfile format not supported (package-lock v1? a pnpm-lock.yaml with no lockfileVersion? bun.lock?); transitive checks disabled');
   }
   const g: Graph = graph ?? { kind: 'none', nodes: new Map(), roots: new Map() };
   result.lock = g.kind;
@@ -171,7 +174,7 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
       result.hits = attribute(g, vulns);
       result.source = 'osv';
     } catch (e) {
-      if (s.auditFallback && g.kind !== 'none') {
+      if (s.auditFallback && (g.kind === 'yarn' || g.kind === 'npm')) {
         try {
           // runAudit only returns a complete report; anything else throws, so a failed audit is never taken for "no vulnerabilities"
           result.hits = await runAudit(g.kind, path.dirname(lock!.file));
@@ -190,7 +193,7 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
   if (s.enableOutdated) {
     const names = [...new Set(entries.filter((e) => result.installed.has(e.name) && !SKIP_RANGE.test(e.range)).map((e) => e.name))];
     await pool(names, 8, async (n) => {
-      const info = await fetchInfo(n, s.registry);
+      const info = await fetchInfo(n, s.registry, { dir: path.dirname(pkgFile), trusted: s.trusted });
       if (info) result.info.set(n, info);
     });
   }

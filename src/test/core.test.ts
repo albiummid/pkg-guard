@@ -1,8 +1,10 @@
 import * as assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { test } from 'node:test';
 import { attribute, parseNpmAudit, parseYarnAudit } from '../sources/audit';
 import { buildFindings } from '../analysis/findings';
-import { buildNpmGraph, buildYarnGraph } from '../sources/lockfile';
+import { buildBunGraph, buildNpmGraph, buildYarnGraph } from '../sources/lockfile';
 import { fixedFor } from '../sources/osv';
 import { addToSection, locateDeps } from '../manifest/packageJson';
 import { pickAtLeast, suggest } from '../sources/registry';
@@ -67,7 +69,7 @@ test('addToSection keeps CRLF, indent and trailing newline', () => {
   assert.ok(out.includes('\r\n') && !/[^\r]\n/.test(out));
   assert.ok(out.endsWith('\r\n'));
   assert.ok(out.includes('    "body-parser": "^2.4.0"'));
-  assert.equal(JSON.parse(out).resolutions['uuid'], '^11.1.1');
+  assert.equal(JSON.parse(out).resolutions.uuid, '^11.1.1');
   const fresh = addToSection('{\n  "name": "x"\n}', 'overrides', 'a', '^1.0.0');
   assert.deepEqual(JSON.parse(fresh).overrides, { a: '^1.0.0' });
   assert.ok(!fresh.endsWith('\n'));
@@ -280,4 +282,24 @@ test('scan: records node_modules versions and where each installed version came 
   assert.equal(r.installedFrom!.get('b'), 'floor');
   const kinds = buildFindings(r, settings).map((x) => `${x.entry.name}:${x.kind}`);
   assert.deepEqual(kinds, ['a:stale', 'b:unsynced']);
+});
+
+test('bun.lock graph reads nested copies and attributes a transitive vulnerability to the direct dependency', () => {
+  const text = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'test', 'fixtures', 'bun.lock'), 'utf8');
+  const g = buildBunGraph(text, { express: '^4.18.0', '@scope/tool': '^1.0.0' })!;
+  assert.equal(g.kind, 'bun');
+  assert.equal(g.roots.get('express'), 'express');
+  assert.deepEqual(g.nodes.get('@scope/tool')!.deps, ['@scope/tool/qs']);
+  assert.deepEqual(g.nodes.get('body-parser')!.deps, ['body-parser/qs']);
+  assert.deepEqual(g.nodes.get('express')!.deps, ['qs', 'body-parser']);
+  const vulns = new Map<string, Vuln[]>([['qs@6.0.1', [V('qs', '6.0.1', { fixedIn: '6.0.4' })]]]);
+  const hits = attribute(g, vulns);
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].root, '@scope/tool');
+  assert.deepEqual(hits[0].path, ['@scope/tool', 'qs']);
+});
+
+test('bun.lock that cannot be read gives no graph', () => {
+  assert.equal(buildBunGraph('not json', {}), null);
+  assert.equal(buildBunGraph('{ "lockfileVersion": 1 }', {}), null);
 });

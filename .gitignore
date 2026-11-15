@@ -5,6 +5,7 @@ node_modules/
 build/
 dist/
 output/
+.vscode-test/
 *.vsix
 *.zip
 *.tsbuildinfo

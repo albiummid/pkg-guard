@@ -1,5 +1,6 @@
 import { compare, parse } from '../versions/semver';
 import { PackageMeta, RepoRef } from '../types';
+import { NpmrcScope, resolveRegistry } from './npmrc';
 
 /** Turns package.json `repository` values (string, object, git+https, git://, github: shorthand, ssh) into a browsable URL. */
 export function normalizeRepo(r: unknown): RepoRef | null {
@@ -23,9 +24,14 @@ export function normalizeRepo(r: unknown): RepoRef | null {
   return gh ? { url: `https://github.com/${gh[1]}/${gh[2]}`, directory, host: 'github', owner: gh[1], repo: gh[2] } : { url: s, directory };
 }
 
-export async function fetchMeta(name: string, registry: string): Promise<PackageMeta | null> {
+export async function fetchMeta(name: string, defaultRegistry: string, scope?: NpmrcScope): Promise<PackageMeta | null> {
   try {
-    const res = await fetch(`${registry.replace(/\/$/, '')}/${name.replace('/', '%2f')}/latest`, { signal: AbortSignal.timeout(15000) });
+    const r = resolveRegistry(name, defaultRegistry, scope);
+    if (!r.registry) return null;
+    const res = await fetch(`${r.registry.replace(/\/$/, '')}/${name.replace('/', '%2f')}/latest`, {
+      headers: r.authorization ? { authorization: r.authorization } : {},
+      signal: AbortSignal.timeout(15000),
+    });
     if (!res.ok) return null;
     const j: any = await res.json();
     return { repo: normalizeRepo(j.repository), homepage: j.homepage, bugs: typeof j.bugs === 'string' ? j.bugs : j.bugs?.url };

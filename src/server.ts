@@ -1,6 +1,8 @@
 // Line-delimited JSON-RPC over stdio, used by the JetBrains plugin. One request per line: {"id":1,"method":"scan","params":{...}}.
 // Replies are {"id":1,"result":...} or {"id":1,"error":"message"}. Anything else on stdout would corrupt the stream, so logs go to stderr.
+import * as path from 'path';
 import * as readline from 'readline';
+import { NpmrcScope } from './sources/npmrc';
 import { bumpTargets, newerVersions } from './versions/bump';
 import { formatReport } from './analysis/compat';
 import { generateUpgradeReport } from './analysis/report';
@@ -13,11 +15,16 @@ import { clearRegistryCache, fetchInfo } from './sources/registry';
 import { changelogBetween, fetchMeta, npmUrl } from './sources/changelog';
 import { scan } from './analysis/scan';
 import { compare, isStable } from './versions/semver';
-import { DepEntry, Fix, ManifestFindings, PinRequest, RangeUpdate, Settings } from './types';
+import { DepEntry, Fix, ManifestFindings, PinRequest, RangeUpdate, Settings, ScanResponse, CompatResponse, VersionsResponse, ChangelogResponse, RepoUrlResponse } from './types';
 
 type Params = Record<string, any>;
 
-async function doScan(p: Params) {
+/** Where a lookup reads .npmrc from: the manifest's folder when the host sends `pkgFile`, trusted only when the host says so. */
+function scopeOf(p: Params): NpmrcScope {
+  return { dir: typeof p.pkgFile === 'string' ? path.dirname(p.pkgFile) : undefined, trusted: p.trusted === true };
+}
+
+async function doScan(p: Params): Promise<ScanResponse> {
   const settings = p.settings as Settings;
   const result = await scan(p.text, p.pkgFile, settings);
   const info: Record<string, { latest?: string; versions: string[]; deprecated: Record<string, string> }> = {};
@@ -53,30 +60,30 @@ async function doUpgradeReport(p: Params) {
   return generateUpgradeReport(p.text, p.pkgFile, result, buildFindings(result, settings), settings);
 }
 
-async function doCompat(p: Params) {
-  const info = await fetchInfo(p.name, p.registry);
+async function doCompat(p: Params): Promise<CompatResponse> {
+  const info = await fetchInfo(p.name, p.registry, scopeOf(p));
   if (!info) throw new Error(`Could not read ${p.name} from the registry.`);
   const installed = new Map<string, string>(Object.entries(p.installed ?? {}));
-  const report = await compatFor({ text: p.text, pkgFile: p.pkgFile, name: p.name, target: p.target, info, registry: p.registry, installed });
+  const report = await compatFor({ text: p.text, pkgFile: p.pkgFile, name: p.name, target: p.target, info, registry: p.registry, trusted: p.trusted, installed });
   return { ...report, text: formatReport(p.name, installed.get(p.name), p.target, report) };
 }
 
-async function doVersions(p: Params) {
-  const info = await fetchInfo(p.name, p.registry);
+async function doVersions(p: Params): Promise<VersionsResponse | null> {
+  const info = await fetchInfo(p.name, p.registry, scopeOf(p));
   if (!info) return null;
   return { latest: latestStable(info), versions: info.versions.filter(isStable).sort((a, b) => compare(b, a)).slice(0, 80), deprecated: info.deprecated };
 }
 
-async function doChangelog(p: Params) {
-  const meta = await fetchMeta(p.name, p.registry);
+async function doChangelog(p: Params): Promise<ChangelogResponse> {
+  const meta = await fetchMeta(p.name, p.registry, scopeOf(p));
   if (!meta?.repo) return { url: npmUrl(p.name) };
   const releases = meta.repo.host === 'github' ? `${meta.repo.url}/releases` : meta.repo.url;
   const res = await changelogBetween(p.name, meta.repo, p.from, p.to);
   return res ? { source: res.source, markdown: res.markdown, url: releases } : { url: releases };
 }
 
-async function doRepoUrl(p: Params) {
-  const meta = await fetchMeta(p.name, p.registry);
+async function doRepoUrl(p: Params): Promise<RepoUrlResponse> {
+  const meta = await fetchMeta(p.name, p.registry, scopeOf(p));
   const url = meta?.repo ? (meta.repo.directory && meta.repo.host === 'github' ? `${meta.repo.url}/tree/HEAD/${meta.repo.directory}` : meta.repo.url) : meta?.homepage;
   return { url: url ?? null, npm: npmUrl(p.name) };
 }

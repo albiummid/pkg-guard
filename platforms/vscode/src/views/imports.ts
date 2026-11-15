@@ -67,7 +67,11 @@ export function registerImportWarnings(ctx: vscode.ExtensionContext): void {
   };
 
   const clear = (doc: vscode.TextDocument) => {
-    results.delete(doc.uri.toString());
+    const key = doc.uri.toString();
+    results.delete(key);
+    tickets.delete(key); // a run still in flight sees its ticket gone and drops its result
+    clearTimeout(timers.get(key));
+    timers.delete(key);
     diagnostics.delete(doc.uri);
     for (const ed of vscode.window.visibleTextEditors) if (ed.document === doc) decorate(ed);
   };
@@ -98,7 +102,13 @@ export function registerImportWarnings(ctx: vscode.ExtensionContext): void {
     if (!isSource(doc)) return;
     const key = doc.uri.toString();
     clearTimeout(timers.get(key));
-    timers.set(key, setTimeout(() => void run(doc), delay));
+    timers.set(
+      key,
+      setTimeout(() => {
+        timers.delete(key);
+        void run(doc);
+      }, delay),
+    );
   };
   const scheduleAll = () => vscode.workspace.textDocuments.forEach((d) => schedule(d));
 

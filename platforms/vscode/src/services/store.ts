@@ -1,8 +1,11 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { buildFindings } from '@core/analysis/findings';
 import { Finding, ScanResult, Settings } from '@core/types';
 import { scan } from '@core/analysis/scan';
+import { NpmrcScope } from '@core/sources/npmrc';
+import { createScanLedger, pruneMissing } from '@core/analysis/scanLedger';
 
 export interface State {
   /** document version the scan was made from; -1 when scanned from disk */
@@ -11,35 +14,30 @@ export interface State {
   findings: Finding[];
 }
 
-export const states = new Map<string, State>();
+const ledger = createScanLedger<State>();
+export const states = ledger.states;
 export const onDidChange = new vscode.EventEmitter<void>();
 export const output = vscode.window.createOutputChannel('Pkg Guard');
 
 const pending = new Map<string, Promise<State | undefined>>();
-const started = new Map<string, number>();
-const committed = new Map<string, number>();
 
 /** Numbers a scan of `key` when it starts. Editor scans and sidebar scans of the same file share this order. */
-export function beginScan(key: string): number {
-  const n = (started.get(key) ?? 0) + 1;
-  started.set(key, n);
-  return n;
+export const beginScan = ledger.begin;
+export const commitScan = ledger.commit;
+export const cancelScans = ledger.cancel;
+
+/**
+ * Forgets the scan state of package.jsons that no longer exist on disk (deleted or renamed). A manifest that is open in an editor, or
+ * that still exists, keeps its state, so nothing the sidebar still shows disappears. Tells the views when something was dropped.
+ */
+export async function pruneStates(): Promise<void> {
+  const open = new Set(vscode.workspace.textDocuments.map((d) => d.uri.toString()));
+  const dropped = await pruneMissing(ledger, open, (k) => fs.promises.access(vscode.Uri.parse(k).fsPath).then(() => true, () => false));
+  if (dropped.length) onDidChange.fire();
 }
 
-/** Stores the result unless a scan that started later has already stored its own: an older result never replaces a newer one. */
-export function commitScan(key: string, seq: number, st: State): boolean {
-  if (seq < (committed.get(key) ?? 0)) return false;
-  committed.set(key, seq);
-  states.set(key, st);
-  return true;
-}
-
-/** Drops every scan of `key` that is still running (a closed document must not get its diagnostics back). */
-export function cancelScans(key: string): void {
-  committed.set(key, beginScan(key));
-}
-
-export function settings(): Settings {
+/** `trusted` is a parameter so a test can see the untrusted result: VS Code never reports an untrusted workspace while extension tests run. */
+export function settings(trusted = vscode.workspace.isTrusted): Settings {
   const c = vscode.workspace.getConfiguration('pkgGuard');
   return {
     enableVulnerabilities: c.get('enableVulnerabilities', true),
@@ -48,11 +46,17 @@ export function settings(): Settings {
     showMajorUpdates: c.get('showMajorUpdates', true),
     checkSync: c.get('checkSync', true),
     minSeverity: c.get('minSeverity', 'low'),
-    auditFallback: c.get('auditFallback', true) && vscode.workspace.isTrusted, // runs yarn/npm audit
+    auditFallback: c.get('auditFallback', true) && trusted, // runs yarn/npm audit
     registry: c.get('registry', 'https://registry.npmjs.org'),
+    trusted, // a project .npmrc is only read in a trusted workspace
     ignoredAdvisories: c.get('ignoredAdvisories', []),
     ignoredPackages: c.get('ignoredPackages', []),
   };
+}
+
+/** Where a registry lookup for a manifest reads .npmrc from; the project's own file only counts in a trusted workspace. */
+export function npmrcScope(uri: vscode.Uri): NpmrcScope {
+  return { dir: path.dirname(uri.fsPath), trusted: vscode.workspace.isTrusted };
 }
 
 /** Text of a package.json: the editor buffer when it is open (may be unsaved), else the file on disk. */

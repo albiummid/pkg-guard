@@ -8,12 +8,14 @@ Vulnerability warnings and update suggestions right inside your `package.json`, 
 
 - **Inline warnings** next to each dependency: known vulnerabilities, newer patch / minor / major versions.
 - **Import warnings**: the same vulnerability warnings on the `import` / `require` lines of vulnerable packages in JS and TS files.
-- **Transitive vulnerabilities** from `yarn.lock` (v1) or `package-lock.json`, shown on the direct dependency that pulls them in.
+- **Transitive vulnerabilities** from `yarn.lock` (classic or berry), `package-lock.json`, `pnpm-lock.yaml` or `bun.lock`, shown on the direct dependency that pulls them in.
 - **One-click fixes**: update to the fixed version, pin a transitive package via `resolutions` / `overrides`, ignore an advisory.
 - **Compatibility check** before an update: peer dependencies, `engines.node`, and companion updates for packages that would break.
 - **Changelog** between your installed version and the target.
 - **Project actions** (tool window / sidebar): add or remove a dependency, fix every vulnerability at once, re-scan; plus a status bar summary of vulnerable and outdated dependencies and a "Needs attention" list.
-- Installs and Pins work with npm, yarn, pnpm and bun. Transitive vulnerability checks need `yarn.lock` v1, `package-lock.json` or `npm-shrinkwrap.json`; with a pnpm, bun or yarn berry lockfile only the direct dependencies are checked, and the scan notes say so. Advisories come from [OSV.dev](https://osv.dev), versions from the npm registry.
+- Installs and Pins work with npm, yarn, pnpm and bun. Transitive vulnerability checks need `yarn.lock` (classic or berry), `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml` (workspace members are read from their own importer) or the text `bun.lock` (not the binary `bun.lockb`); with a `bun.lockb` only the direct dependencies are checked, and the scan notes say so. Advisories come from [OSV.dev](https://osv.dev), versions from the npm registry.
+
+Private registries: versions are looked up on the registry a package's scope maps to in `.npmrc` (`@scope:registry=`), and `registry=` replaces the default when the registry setting is left at the public npm registry. Credentials (`//host/path/:_authToken`, `:_auth`, `:username` with `:_password`, with `${VAR}` expansion) come from your user `.npmrc` (or `NPM_CONFIG_USERCONFIG`) and from `.npmrc` files in the project folder and its parents, are sent only to the registry whose key they match and never to OSV.dev, and a scoped package is never retried on the public registry. In an untrusted VS Code workspace the project `.npmrc` is ignored. Not supported: global `_auth` without a host key, client certificates, proxies and `npmrc` settings from `package.json`. The JetBrains plugin reads the user `.npmrc` only.
 
 ## Install
 

@@ -27,7 +27,7 @@ object AddDependency {
         val registry = svc.settings.state.registry
         val lookup = withModalProgress(project, "Looking up $name…") {
             try {
-                Lookup.Done(svc.sidecar.call<VersionsResponse?>("versions", mapOf("name" to name, "registry" to registry))?.latest)
+                Lookup.Done(svc.sidecar.call<VersionsResponse?>("versions", mapOf("name" to name, "registry" to registry, "pkgFile" to file.path, "trusted" to ProjectTrust.isTrusted(project)))?.latest)
             } catch (e: ProcessCanceledException) {
                 throw e
             } catch (e: Exception) {

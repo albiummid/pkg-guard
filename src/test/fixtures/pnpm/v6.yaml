@@ -1,0 +1,58 @@
+lockfileVersion: '6.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+dependencies:
+  express:
+    specifier: ^4.17.0
+    version: 4.17.1
+  cjs-width:
+    specifier: npm:string-width@^4.2.0
+    version: /string-width@4.2.3
+
+devDependencies:
+  vitest:
+    specifier: ^1.0.0
+    version: 1.0.0(@types/node@20.0.0)
+
+packages:
+
+  /accepts@1.3.7:
+    resolution: {integrity: sha512-aaa}
+    engines: {node: '>= 0.6'}
+    dependencies:
+      mime-types: 2.1.35
+    dev: false
+
+  /express@4.17.1:
+    resolution: {integrity: sha512-bbb}
+    engines: {node: '>= 0.10.0'}
+    dependencies:
+      accepts: 1.3.7
+      qs: 6.7.0
+    dev: false
+
+  /mime-types@2.1.35:
+    resolution: {integrity: sha512-ccc}
+    dev: false
+
+  /qs@6.7.0:
+    resolution: {integrity: sha512-ddd}
+    dev: false
+
+  /string-width@4.2.3:
+    resolution: {integrity: sha512-hhh}
+    dev: false
+
+  /vitest@1.0.0(@types/node@20.0.0):
+    resolution: {integrity: sha512-iii}
+    dependencies:
+      '@types/node': 20.0.0
+      qs: 6.7.0
+    dev: true
+
+  /@types/node@20.0.0:
+    resolution: {integrity: sha512-jjj}
+    dev: true

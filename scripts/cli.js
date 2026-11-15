@@ -250,6 +250,12 @@ function runCore(args) {
     run(['--test', ...testFiles]);
     return 0;
   }
+  if (task === 'lint') {
+    // Covers the shared core (src/) and the VS Code extension; rules live in biome.json. Warnings fail too.
+    const biome = path.resolve(path.dirname(require.resolve('@biomejs/biome/package.json')), 'bin/biome');
+    run([biome, 'lint', '--error-on-warnings', '.']);
+    return 0;
+  }
   if (task === 'build:server') {
     require('esbuild').buildSync({
       entryPoints: [path.join(core, 'src/server.ts')],
@@ -260,15 +266,15 @@ function runCore(args) {
     });
     return 0;
   }
-  throw new Error('Usage: yarn cli core compile|watch|build:server|test');
+  throw new Error('Usage: yarn cli core compile|watch|build:server|test|lint');
 }
 
 function runVscode(args) {
   const task = args[0];
-  const usage = 'Usage: yarn cli vscode typecheck|compile|package|install [--profile <name>] [--editor <command>]';
-  if (!['typecheck', 'compile', 'package', 'install'].includes(task)) throw new Error(usage);
+  const usage = 'Usage: yarn cli vscode typecheck|compile|test|package|install [--profile <name>] [--editor <command>]';
+  if (!['typecheck', 'compile', 'test', 'package', 'install'].includes(task)) throw new Error(usage);
   if (task !== 'install') {
-    execSync(`yarn workspace pkg-guard ${task}`, { cwd: root, stdio: 'inherit' });
+    execSync(`yarn workspace pkg-guard ${task}${task === 'test' && args[1] ? ` ${args[1]}` : ''}`, { cwd: root, stdio: 'inherit' });
     return 0;
   }
 
@@ -397,7 +403,7 @@ async function interactive() {
   if (task === 'changelog') return manageChangelog(['--check']);
   if (task === 'core') {
     const action = await p.select({ message: 'Choose a core task', options: [
-      { value: 'test', label: 'Run core tests' }, { value: 'build:server', label: 'Build Node sidecar' },
+      { value: 'test', label: 'Run core tests' }, { value: 'lint', label: 'Lint TypeScript' }, { value: 'build:server', label: 'Build Node sidecar' },
       { value: 'compile', label: 'Compile TypeScript' }, { value: 'watch', label: 'Watch TypeScript' },
     ] });
     if (p.isCancel(action)) return p.cancel('Cancelled.');
@@ -405,7 +411,7 @@ async function interactive() {
   }
   if (task === 'vscode') {
     const action = await p.select({ message: 'Choose a VS Code task', options: [
-      { value: 'typecheck', label: 'Typecheck extension' }, { value: 'package', label: 'Build VSIX package' },
+      { value: 'typecheck', label: 'Typecheck extension' }, { value: 'test', label: 'Run in-editor tests (downloads VS Code)' }, { value: 'package', label: 'Build VSIX package' },
       { value: 'install', label: 'Build and install in VS Code' },
     ] });
     if (p.isCancel(action)) return p.cancel('Cancelled.');

@@ -12,6 +12,8 @@ export interface Settings {
   minSeverity: 'low' | 'moderate' | 'high' | 'critical';
   auditFallback: boolean;
   registry: string;
+  /** The host trusts the workspace: only then is the project's .npmrc read (the user's always is). Absent means untrusted. */
+  trusted?: boolean;
   ignoredAdvisories: string[];
   ignoredPackages: string[];
 }

@@ -3,7 +3,7 @@ import { SKIP_RANGE } from './scan';
 import { satisfies } from '../versions/satisfies';
 import { baseVersion, compare, diffKind, gt, isTagRange, major, prefixOf } from '../versions/semver';
 import { Hit, SEVERITY_RANK, Severity, Vuln } from '../types/index';
-import { DepEntry, Finding, Fix, ScanResult, Settings } from '../types';
+import { Finding, Fix, ScanResult, Settings } from '../types';
 
 const LABEL: Record<Severity, string> = { critical: 'CRITICAL', high: 'HIGH', moderate: 'MODERATE', low: 'LOW', unknown: 'UNKNOWN' };
 

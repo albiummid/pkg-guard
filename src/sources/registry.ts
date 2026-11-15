@@ -1,4 +1,5 @@
 import { compare, gt, isStable, major } from '../versions/semver';
+import { NpmrcScope, resolveRegistry } from './npmrc';
 import { Manifest, RegistryInfo, Suggestion } from '../types';
 
 const TTL = 60 * 60 * 1000;
@@ -11,25 +12,28 @@ export function clearRegistryCache(): void {
   cache.clear();
 }
 
-export function fetchInfo(name: string, registry: string): Promise<RegistryInfo | null> {
-  const key = `${registry}|${name}`;
+/** `registry` is the configured default; a scope mapped in .npmrc wins over it, and .npmrc credentials go only to the registry they belong to. */
+export function fetchInfo(name: string, registry: string, scope?: NpmrcScope): Promise<RegistryInfo | null> {
+  const r = resolveRegistry(name, registry, scope);
+  if (!r.registry) return Promise.resolve(null);
+  const key = `${r.registry}|${r.authorization ? 'auth|' : ''}${name}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.t < hit.ttl) return Promise.resolve(hit.info);
   const running = inflight.get(key);
   if (running) return running;
-  const p = load(name, registry, key);
+  const p = load(name, r.registry, r.authorization, key);
   inflight.set(key, p);
   void p.then(() => inflight.delete(key));
   return p;
 }
 
-async function load(name: string, registry: string, key: string): Promise<RegistryInfo | null> {
+async function load(name: string, registry: string, authorization: string | undefined, key: string): Promise<RegistryInfo | null> {
   let info: RegistryInfo | null = null;
   let ttl = TTL;
   try {
     const url = `${registry.replace(/\/$/, '')}/${name.replace('/', '%2f')}`;
     const res = await fetch(url, {
-      headers: { accept: 'application/vnd.npm.install-v1+json' },
+      headers: { accept: 'application/vnd.npm.install-v1+json', ...(authorization ? { authorization } : {}) },
       signal: AbortSignal.timeout(15000),
     });
     if (res.ok) {
@@ -64,7 +68,7 @@ export function suggest(installed: string, info: RegistryInfo): Suggestion {
 }
 
 /** Newest stable version >= `min`, preferring the installed major (a fix is usually followed by more patches). */
-export function pickAtLeast(min: string, installed: string, info: RegistryInfo | null): string {
+export function pickAtLeast(min: string, _installed: string, info: RegistryInfo | null): string {
   if (!info) return min;
   const stable = info.versions.filter((v) => isStable(v) && compare(v, min) >= 0);
   const sameMajor = stable.filter((v) => major(v) === major(min));

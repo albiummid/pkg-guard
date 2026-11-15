@@ -1,0 +1,77 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      express:
+        specifier: ^4.17.0
+        version: 4.17.1
+      cjs-width:
+        specifier: npm:string-width@^4.2.0
+        version: string-width@4.2.3
+      shared:
+        specifier: workspace:*
+        version: link:packages/shared
+    devDependencies:
+      vitest:
+        specifier: ^1.0.0
+        version: 1.0.0(@types/node@20.0.0)
+
+packages:
+
+  accepts@1.3.7:
+    resolution: {integrity: sha512-aaa}
+    engines: {node: '>= 0.6'}
+
+  express@4.17.1:
+    resolution: {integrity: sha512-bbb}
+    engines: {node: '>= 0.10.0'}
+
+  mime-types@2.1.35:
+    resolution: {integrity: sha512-ccc}
+
+  qs@6.7.0:
+    resolution: {integrity: sha512-ddd}
+
+  string-width@4.2.3:
+    resolution: {integrity: sha512-hhh}
+
+  vitest@1.0.0:
+    resolution: {integrity: sha512-iii}
+    hasBin: true
+    peerDependencies:
+      '@types/node': '>=18'
+
+  '@types/node@20.0.0':
+    resolution: {integrity: sha512-jjj}
+
+snapshots:
+
+  accepts@1.3.7:
+    dependencies:
+      mime-types: 2.1.35
+
+  express@4.17.1:
+    dependencies:
+      accepts: 1.3.7
+      qs: 6.7.0
+
+  mime-types@2.1.35: {}
+
+  qs@6.7.0: {}
+
+  string-width@4.2.3: {}
+
+  vitest@1.0.0(@types/node@20.0.0):
+    dependencies:
+      '@types/node': 20.0.0
+      qs: 6.7.0
+    optionalDependencies:
+      cjs-alias: string-width@4.2.3
+
+  '@types/node@20.0.0': {}

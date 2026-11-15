@@ -1,0 +1,14 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.7/schema.json",
+  "vcs": { "enabled": false },
+  "files": { "includes": ["src/**/*.ts", "platforms/vscode/src/**/*.ts"] },
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "style": { "noNonNullAssertion": "off", "useImportType": "off", "useNodejsImportProtocol": "off", "useTemplate": "off", "useExponentiationOperator": "off" },
+      "suspicious": { "noExplicitAny": "off", "noAssignInExpressions": "off", "useIterableCallbackReturn": "off" }
+    }
+  }
+}

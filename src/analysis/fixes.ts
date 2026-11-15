@@ -8,7 +8,7 @@ import { fetchInfo } from '../sources/registry';
 import { satisfies } from '../versions/satisfies';
 import { readInstalledPkg } from './scan';
 import { baseVersion, gt, isStable, prefixOf } from '../versions/semver';
-import { CompatContext, CompatReport, DepEntry, Dependent, Finding, Fix, FixEffect, PinRequest, RangeUpdate, RegistryInfo, Section, TextEdit } from '../types';
+import { CompatContext, CompatReport, DepEntry, Dependent, Fix, FixEffect, PinRequest, RangeUpdate, RegistryInfo, TextEdit } from '../types';
 
 export function latestStable(info: RegistryInfo): string | undefined {
   let best = info.latest && isStable(info.latest) ? info.latest : undefined;
@@ -93,7 +93,7 @@ export async function compatFor(c: CompatContext): Promise<CompatReport> {
     if (!m || range === undefined) continue;
     const dep: Dependent = { name: e.name, version: m.version, peerRange: range, optional: !!m.peerDependenciesMeta?.[c.name]?.optional };
     if (!satisfies(c.target, range)) {
-      const depInfo = await fetchInfo(e.name, c.registry);
+      const depInfo = await fetchInfo(e.name, c.registry, { dir: path.dirname(c.pkgFile), trusted: c.trusted });
       if (depInfo) dep.fixedBy = findCompanion(depInfo.versions, depInfo.manifests, c.name, c.target, m.version);
     }
     dependents.push(dep);

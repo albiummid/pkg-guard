@@ -7,7 +7,7 @@ import { install, offerInstall } from './services/install';
 import { clearOsvCache } from '@core/sources/osv';
 import { clearRegistryCache } from '@core/sources/registry';
 import { scan } from '@core/analysis/scan';
-import { beginScan, cancelScans, commitScan, findProjects, onDidChange, output, scanUri, settings, states } from './services/store';
+import { beginScan, cancelScans, commitScan, findProjects, onDidChange, output, pruneStates, scanUri, settings, states } from './services/store';
 import { PackagesTree } from './views/tree';
 import { registerImportWarnings } from './views/imports';
 
@@ -203,7 +203,21 @@ class Fixer implements vscode.CodeActionProvider {
   }
 }
 
-export function activate(ctx: vscode.ExtensionContext): void {
+/** What the in-editor tests (src/test) reach into; the extension itself does not use it. */
+export interface TestApi {
+  states: typeof states;
+  beginScan: typeof beginScan;
+  commitScan: typeof commitScan;
+  cancelScans: typeof cancelScans;
+  settings: typeof settings;
+  tree: PackagesTree;
+  /** what runs when the workspace is granted trust, which a test cannot do from the outside */
+  onTrustGranted: () => void;
+  /** scans the open document at `uri` now */
+  scanOpen: (uri: vscode.Uri) => Promise<void>;
+}
+
+export function activate(ctx: vscode.ExtensionContext): TestApi {
   diagnostics = vscode.languages.createDiagnosticCollection('pkg-guard');
   status = vscode.window.createStatusBarItem('pkgGuard.status', vscode.StatusBarAlignment.Left, 0);
   status.name = 'Pkg Guard';
@@ -224,6 +238,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
       schedule(d, 0);
     }
     // projects whose package.json is not open are scanned from disk for the sidebar
+    void pruneStates();
     void findProjects().then((files) => files.filter((u) => !open.has(u.toString())).forEach((u) => void scanUri(u)));
     tree.refresh();
   };
@@ -240,6 +255,9 @@ export function activate(ctx: vscode.ExtensionContext): void {
       tree.refresh();
     },
   );
+
+  // granting trust turns the audit fallback (and installs) on: results made without it are out of date
+  const onTrustGranted = () => refreshAll(false);
 
   // new advisories are published all the time; without this a window left open never sees them
   let periodic: NodeJS.Timeout | undefined;
@@ -276,7 +294,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
       diagnostics.delete(d.uri);
     }),
     // granting trust turns the audit fallback (and installs) on: results made without it are out of date
-    vscode.workspace.onDidGrantWorkspaceTrust(() => refreshAll(false)),
+    vscode.workspace.onDidGrantWorkspaceTrust(onTrustGranted),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('pkgGuard.refreshIntervalHours')) schedulePeriodic();
       if (e.affectsConfiguration('pkgGuard')) refreshAll(false);
@@ -295,7 +313,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
     }),
   );
 
-  const watcher = vscode.workspace.createFileSystemWatcher('**/{yarn.lock,package-lock.json,pnpm-lock.yaml,package.json}');
+  const watcher = vscode.workspace.createFileSystemWatcher('**/{yarn.lock,package-lock.json,pnpm-lock.yaml,bun.lock,package.json}');
   let watchTimer: NodeJS.Timeout | undefined;
   const onFile = (u: vscode.Uri) => {
     if (/[\\/]node_modules[\\/]/.test(u.fsPath)) return;
@@ -312,6 +330,16 @@ export function activate(ctx: vscode.ExtensionContext): void {
   ctx.subscriptions.push(watcher);
 
   refreshAll(false);
+  return {
+    states,
+    beginScan,
+    commitScan,
+    cancelScans,
+    settings,
+    tree,
+    onTrustGranted,
+    scanOpen: (uri) => run(vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString())!),
+  };
 }
 
 export function deactivate(): void {

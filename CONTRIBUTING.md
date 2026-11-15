@@ -28,7 +28,7 @@ Incorrect or missing advisories come from [OSV.dev](https://osv.dev), so report 
 
 Inside `src/`, code is grouped by role: `types/`, `versions/`, `manifest/`, `sources/`, `analysis/`, plus `server.ts` and `test/`. Keep the dependency direction in mind: `sources/` and `analysis/` may import from `types/`, `versions/` and `manifest/`, never the reverse. See the layout section of [README.md](README.md).
 
-If you add or change a sidecar method, update the Kotlin types in `platforms/jetbrains/src/main/kotlin/dev/pkgguard/Model.kt` by hand. They mirror the TypeScript shapes and are not generated yet.
+The TypeScript types in `src/types/` (replies the plugin reads are in `src/types/protocol.ts`) are the source of truth for the JSON the sidecar returns. If you add or change a sidecar method, change those types, then update the Kotlin mirror in `platforms/jetbrains/src/main/kotlin/dev/pkgguard/Model.kt` to match. `src/test/protocol.test.ts` (part of `yarn cli core test`, so part of CI) parses both and fails with the differing fields when a name, type or optionality disagrees; a Kotlin class named differently from its TypeScript type, or a TypeScript field the plugin ignores on purpose, is listed at the top of that test.
 
 ## Setup
 
@@ -37,7 +37,9 @@ Requirements: Node.js 24, yarn 1.x, and JDK 21 (JetBrains plugin only; the oldes
 ```bash
 yarn install                                         # root CLI and VS Code workspace tools
 yarn cli core test                                   # shared logic + tests
+yarn cli core lint                                   # lint the shared core and the VS Code extension (Biome)
 yarn cli vscode typecheck                           # VS Code extension
+yarn cli vscode test                                # in-editor tests (downloads VS Code, see below)
 yarn cli jetbrains run                              # sandbox IDE with the plugin
 ```
 
@@ -55,10 +57,14 @@ yarn cli build                                      # both (or: yarn cli build v
 1. Open or comment on an issue first for anything larger than a small fix, so we agree on the approach.
 2. Branch from `master`: `feat/<short-name>` or `fix/<short-name>`.
 3. Keep the change focused. Match the surrounding style and comment density.
-4. Add or update tests in `src/test/` for logic changes. Run `yarn cli core test`.
-5. Run `yarn cli vscode typecheck` if you touched TypeScript used by the extension.
+4. Add or update tests in `src/test/` for logic changes. Run `yarn cli core test` and `yarn cli core lint`.
+5. Run `yarn cli vscode typecheck` if you touched TypeScript used by the extension, and `yarn cli vscode test` if you touched `platforms/vscode/`.
 6. If you touched the sidecar or `src/`, build the JetBrains plugin once to confirm it still bundles.
 7. Update the READMEs when behaviour or settings change. New settings go in `platforms/vscode/package.json`, the JetBrains settings page, and the settings table in `platforms/vscode/README.md`.
+
+### In-editor tests (VS Code)
+
+`yarn cli vscode test [scenario]` downloads the minimum supported VS Code (`engines.vscode`; set `PKG_GUARD_VSCODE_VERSION=stable` to try another) into `platforms/vscode/.vscode-test/` and runs the Mocha suites in `platforms/vscode/src/test/` inside it. Each scenario (`workspace`, `empty`, `lone`) is its own VS Code window on a throwaway workspace, because the folder and the first activation event cannot change in a running window. VS Code treats every workspace as trusted while extension tests run, so the untrusted behaviour is checked at its seams: the restricted settings declared in the manifest and `settings(false)`. The scans stay offline. On Linux without a display, wrap it in `xvfb-run -a`. `extension.ts` returns a `TestApi` from `activate` for the tests; the extension itself does not use it.
 
 ### Versions
 
@@ -78,14 +84,14 @@ yarn cli release patch --push    # or minor / major / x.y.z
 
 First it requires a clean `master` that is up to date with `origin` and runs the core tests, the VS Code typecheck and the version and changelog checks (`--skip-checks` skips them; `--help` shows usage). If any check fails, nothing is changed. Then it bumps `version.yml`, stamps every platform, updates `CHANGELOG.md`, commits `chore: release vX.Y.Z`, tags it and pushes. The tag starts `.github/workflows/release.yml`, which checks the tag against `version.yml` and the changelog, runs the tests, builds the `.vsix` and the plugin zip, and attaches both to a GitHub release whose notes are that version's section of `CHANGELOG.md` (tags with a `-` suffix are marked as pre-releases).
 
-**Changelog.** `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com): an `## [Unreleased]` section, then `## [x.y.z] - YYYY-MM-DD` sections with optional `### New Feature`, `### Improvements`, and `### Fixes` groups. Write user-facing entries under Unreleased as changes land; `yarn cli release` moves them under the new version. If Unreleased is empty, it builds the entries from Conventional Commit subjects since the last tag (`feat` → New Feature, `fix` → Fixes, `perf`/`refactor`/`revert` → Improvements; `docs`, `chore`, `test` and `ci` are left out; `!` marks a breaking change). Curated entries read better, so prefer writing them. `yarn cli changelog --check` validates the format and runs in CI. It then publishes to the VS Code Marketplace through Trusted Publishing (GitHub OIDC, no secret), and to the other stores only when their secret exists: `OVSX_PAT` (Open VSX), `JETBRAINS_PUBLISH_TOKEN` (JetBrains Marketplace, plus the `JETBRAINS_CERTIFICATE_CHAIN` / `JETBRAINS_PRIVATE_KEY` / `JETBRAINS_PRIVATE_KEY_PASSWORD` signing secrets). Registry setup and re-publishing are in [docs/publishing.md](docs/publishing.md). Pull requests and pushes to `master` run `.github/workflows/ci.yml` (version sync, core tests, VS Code typecheck and package, JetBrains build).
+**Changelog.** `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com): an `## [Unreleased]` section, then `## [x.y.z] - YYYY-MM-DD` sections with optional `### New Feature`, `### Improvements`, and `### Fixes` groups. Write user-facing entries under Unreleased as changes land; `yarn cli release` moves them under the new version. If Unreleased is empty, it builds the entries from Conventional Commit subjects since the last tag (`feat` → New Feature, `fix` → Fixes, `perf`/`refactor`/`revert` → Improvements; `docs`, `chore`, `test` and `ci` are left out; `!` marks a breaking change). Curated entries read better, so prefer writing them. `yarn cli changelog --check` validates the format and runs in CI. It then publishes to the VS Code Marketplace through Trusted Publishing (GitHub OIDC, no secret), and to the other stores only when their secret exists: `OVSX_PAT` (Open VSX), `JETBRAINS_PUBLISH_TOKEN` (JetBrains Marketplace, plus the `JETBRAINS_CERTIFICATE_CHAIN` / `JETBRAINS_PRIVATE_KEY` / `JETBRAINS_PRIVATE_KEY_PASSWORD` signing secrets). Registry setup and re-publishing are in [docs/publishing.md](docs/publishing.md). Lint rules are in `biome.json` (Biome's recommended set, minus a few style and `any` rules the existing code does not meet yet; warnings fail CI). Pull requests and pushes to `master` run `.github/workflows/ci.yml` (version sync, core lint and tests, VS Code typecheck and package, JetBrains build).
 
 ### Commits and pull requests
 
 - Use [Conventional Commits](https://www.conventionalcommits.org): `feat: ...`, `fix: ...`, `docs: ...`, `refactor: ...`, `test: ...`, `chore: ...`.
 - One logical change per PR. Link the issue (`Closes #123`).
 - Describe what changed and why, and how you tested it. Screenshots or GIFs help for UI changes.
-- PRs need passing tests and a clean typecheck before review.
+- PRs need passing tests, a clean lint and a clean typecheck before review.
 
 ## Adding a new platform
 

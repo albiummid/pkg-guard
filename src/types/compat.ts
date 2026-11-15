@@ -8,6 +8,8 @@ export interface CompatContext {
   target: string;
   info: RegistryInfo;
   registry: string;
+  /** see Settings.trusted */
+  trusted?: boolean;
   /** installed versions from the last scan; node_modules is the fallback */
   installed?: Map<string, string>;
 }

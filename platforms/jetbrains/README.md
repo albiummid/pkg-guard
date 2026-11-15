@@ -10,7 +10,7 @@ Vulnerability warnings and update suggestions right inside `package.json`, inclu
 - **End-of-line hints** like `⚠ 3 vulns → 4.18.1` on dependency lines, colored by severity.
 - **Import warnings** in JS / TS files: vulnerable packages are flagged on their `import` / `require` lines, with an end-of-line hint.
 - **Alt+Enter fixes**: update to the fixed version, pin a transitive package via `resolutions` / `overrides`, ignore an advisory, open the advisory in the browser.
-- **Transitive vulnerabilities** from `yarn.lock` (v1), `package-lock.json` or `npm-shrinkwrap.json`, shown on the direct dependency that pulls them in. pnpm and bun lockfiles are not read yet; a project that has one gets no transitive checks, and the scan notes say so.
+- **Transitive vulnerabilities** from `yarn.lock` (classic v1 and berry v2+), `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml` or `bun.lock`, shown on the direct dependency that pulls them in. The binary `bun.lockb` is not read; a project that has one gets no transitive checks, and the scan notes say so.
 - **Pkg Guard tool window** (right side): every `package.json` with its dependencies, update to latest or a chosen version (only newer versions are offered), changelog, run scripts. It also has:
   - a **Needs attention** group of the dependencies with a vulnerability, deprecation or out-of-sync install;
   - **Notes** per project: unsupported lockfile, dependencies not checked, the data source of the last scan;
@@ -24,6 +24,10 @@ Vulnerability warnings and update suggestions right inside `package.json`, inclu
 ## Requirements
 
 Node.js 24 or newer on the machine. If it is not found automatically, set its path in *Settings | Tools | Pkg Guard*.
+
+## Proxy
+
+If the IDE has an HTTP proxy configured (*Settings | Appearance & Behavior | System Settings | HTTP Proxy*, manual HTTP proxy), the plugin passes it to the scanner as `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` (with `NODE_USE_ENV_PROXY=1`), so OSV.dev, registry and changelog requests go through it. The proxy login is only handed to the scanner process and is never logged. With no IDE proxy the scanner keeps whatever proxy variables the IDE process already has. SOCKS and PAC (auto-config URL) proxies are not picked up.
 
 ## Install
 
