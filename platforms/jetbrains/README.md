@@ -25,6 +25,10 @@ Vulnerability warnings and update suggestions right inside `package.json`, inclu
 
 Node.js 24 or newer on the machine. If it is not found automatically, set its path in *Settings | Tools | Pkg Guard*.
 
+## Proxy
+
+If the IDE has an HTTP proxy configured (*Settings | Appearance & Behavior | System Settings | HTTP Proxy*, manual HTTP proxy), the plugin passes it to the scanner as `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` (with `NODE_USE_ENV_PROXY=1`), so OSV.dev, registry and changelog requests go through it. The proxy login is only handed to the scanner process and is never logged. With no IDE proxy the scanner keeps whatever proxy variables the IDE process already has. SOCKS and PAC (auto-config URL) proxies are not picked up.
+
 ## Install
 
 Download the plugin `.zip`, then *Settings | Plugins | ⚙ | Install Plugin from Disk…*.
