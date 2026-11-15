@@ -1,6 +1,8 @@
 package dev.pkgguard
 
-import com.intellij.util.net.HttpConfigurable
+import com.intellij.util.net.ProxyConfiguration
+import com.intellij.util.net.ProxyCredentialStore
+import com.intellij.util.net.ProxySettings
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 
@@ -42,12 +44,13 @@ object ProxyEnv {
 
     /** The proxy set in Settings | Appearance & Behavior | System Settings | HTTP Proxy, or null when none (or a SOCKS / PAC one, which Node cannot take from the environment). */
     fun fromIde(): ProxyConfig? {
-        val c = HttpConfigurable.getInstance()
-        if (!c.USE_HTTP_PROXY || c.PROXY_TYPE_IS_SOCKS) return null
-        val host = c.PROXY_HOST?.trim().orEmpty()
+        val c = ProxySettings.getInstance().proxyConfiguration as? ProxyConfiguration.StaticProxyConfiguration ?: return null
+        if (c.protocol != ProxyConfiguration.ProxyProtocol.HTTP) return null
+        val host = c.host.trim()
         if (host.isEmpty()) return null
-        val auth = c.PROXY_AUTHENTICATION
-        return ProxyConfig(host, c.PROXY_PORT, if (auth) c.proxyLogin else null, if (auth) c.plainProxyPassword else null, c.PROXY_EXCEPTIONS.orEmpty())
+        // Credentials are stored only when the proxy needs authentication
+        val creds = ProxyCredentialStore.getInstance().getCredentials(c.host, c.port)
+        return ProxyConfig(host, c.port, creds?.userName, creds?.getPasswordAsString(), c.exceptions)
     }
 
     private fun enc(s: String) = URLEncoder.encode(s, UTF_8).replace("+", "%20")

@@ -4,6 +4,7 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.roots.ProjectFileIndex
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileDeleteEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
@@ -17,7 +18,7 @@ private val WATCHED = setOf("package.json", "yarn.lock", "package-lock.json", "n
 class PkgGuardFileListener : BulkFileListener {
     /** A deleted, moved or renamed file still has its old path before the change is applied: forget its import state now. */
     override fun before(events: List<VFileEvent>) {
-        val gone = events.filter { it is VFileDeleteEvent || it is VFileMoveEvent || (it is VFilePropertyChangeEvent && it.isRename) }.map { it.path }
+        val gone = events.filter { it is VFileDeleteEvent || it is VFileMoveEvent || (it is VFilePropertyChangeEvent && it.propertyName == VirtualFile.PROP_NAME) }.map { it.path }
         if (gone.isEmpty()) return
         for (p in ProjectManager.getInstance().openProjects) if (!p.isDisposed) p.service<PkgGuardService>().forgetImportStates(gone)
     }
