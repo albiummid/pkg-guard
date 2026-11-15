@@ -15,8 +15,12 @@ The exact version of a dependency confirmed by the lockfile or `node_modules`.
 _Avoid_: Current version, resolved version
 
 **Floor version**:
-The lowest version a Declared range permits (`^1.2.0` gives `1.2.0`), used only when no Installed version can be confirmed. A guess, so warnings based on it read "may be vulnerable". Advisories are then checked against every published version the Declared range allows (prereleases only when the range names one), not only the Floor version, and the warning names the allowed versions that are affected.
+The lowest version a Declared range permits (`^1.2.0` gives `1.2.0`), used only when no Installed version can be confirmed. A guess, so warnings based on it read "may be vulnerable".
 _Avoid_: Assumed version, installed version
+
+**Allowed version**:
+A published version of a package that its Declared range allows (prereleases only when the range names one). Known from the registry data fetched for available Updates.
+_Avoid_: Candidate version, matching version
 
 ### Security
 
@@ -25,7 +29,7 @@ A published record of a security flaw in a package, with its affected versions a
 _Avoid_: CVE, report
 
 **Vulnerability**:
-An Advisory that applies to one specific copy of a package (an Installed or Floor version) in the user's project. One Advisory yields one Vulnerability per affected copy. With only a Floor version, the Advisory applies when it affects any published version the Declared range allows.
+An Advisory that applies to one specific copy of a package (an Installed or Floor version) in the user's project. One Advisory yields one Vulnerability per affected copy. With only a Floor version, the Advisory is checked against every Allowed version, not only the Floor version: it applies when it affects any of them, and the warning names the Allowed versions it affects. When the Allowed versions are not known (update checks off, no registry data), only the Floor version is checked.
 _Avoid_: Issue, finding
 
 **Transitive vulnerability**:

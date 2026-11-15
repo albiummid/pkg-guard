@@ -3,7 +3,7 @@ import * as path from 'path';
 import { attribute, runAudit } from '../sources/audit';
 import { buildBunGraph, buildNpmGraph, buildYarnGraph } from '../sources/lockfile';
 import { buildPnpmGraph } from '../sources/pnpmLock';
-import { osvQuery } from '../sources/osv';
+import { osvQuery, Pkg } from '../sources/osv';
 import { locateDeps } from '../manifest/packageJson';
 import { fetchInfo } from '../sources/registry';
 import { baseVersion } from '../versions/semver';
@@ -181,7 +181,7 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
   // 3. vulnerabilities
   if (s.enableVulnerabilities) {
     try {
-      let nodes: { name: string; version: string; allowed?: string[] }[] = [...g.nodes.values()];
+      let nodes: Pkg[] = [...g.nodes.values()];
       if (!s.checkTransitive || g.kind === 'none') nodes = [...g.roots.values()].map((id) => g.nodes.get(id)!);
       // Nothing installed: every published version the range allows is checked, not only the Floor version. Those come from the
       // registry data fetched above for Updates; without it (update checks off, registry unreachable) only the Floor version is.

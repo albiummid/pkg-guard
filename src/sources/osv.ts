@@ -158,7 +158,7 @@ async function post(url: string, body: unknown): Promise<any> {
  * `allowed` is set when nothing is installed: the package is then asked for with no version, which returns every Advisory it has,
  * and each Advisory is matched here against these published versions the Declared range allows.
  */
-type Pkg = { name: string; version: string; allowed?: string[] };
+export type Pkg = { name: string; version: string; allowed?: string[] };
 /** Key of the result: the version checked (the Floor version when `allowed` is set). */
 const keyOf = (p: Pkg) => `${p.name}@${p.version}`;
 /** Key of the OSV query and its cached ids; the query with no version is shared by every range of the package. */
@@ -214,7 +214,7 @@ function allowedVuln(d: any, p: Pkg): Vuln | undefined {
     else if (!fixedIn || compare(m.fixed, fixedIn) > 0) fixedIn = m.fixed;
   }
   if (open || (fixedIn && compare(fixedIn, hit[hit.length - 1]) <= 0)) fixedIn = undefined;
-  return { ...toVuln(d, p.name, p.version), fixedIn, affected: hit };
+  return { ...toVuln(d, p.name, p.version), fixedIn, affectedAllowed: hit };
 }
 
 /**

@@ -39,7 +39,7 @@ function advisoryLines(vs: Vuln[]): string {
 
 /** The affected versions of a dependency checked with nothing installed, oldest first ("1.0.1, 1.0.2 and 3 more"). */
 function versionList(vs: Vuln[]): string {
-  const all = [...new Set(vs.flatMap((v) => v.affected ?? [v.version]))].sort(compare);
+  const all = [...new Set(vs.flatMap((v) => v.affectedAllowed ?? [v.version]))].sort(compare);
   return all.length > 4 ? `${all.slice(0, 4).join(', ')} and ${all.length - 4} more` : all.join(', ');
 }
 
