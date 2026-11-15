@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { test } from 'node:test';
 import { buildFindings } from '../analysis/findings';
 import { scan } from '../analysis/scan';
-import { clearOsvCache, isAffected } from '../sources/osv';
+import { clearOsvCache, fixedFor, isAffected } from '../sources/osv';
 import { clearRegistryCache } from '../sources/registry';
 import { Settings } from '../types';
 
@@ -110,4 +110,34 @@ test('OSV ranges are matched in version order, with last_affected and explicit v
   assert.equal(isAffected(affected, 'p', '1.6.1'), false);
   assert.equal(isAffected(affected, 'other', '1.0.0'), false);
   assert.equal(isAffected([{ package: { name: 'p' }, versions: ['3.0.0'] }], 'p', '3.0.0'), true);
+});
+
+test('the fixed version of a version comes from the same ordered walk as whether it is affected', () => {
+  const affected = [{ package: { name: 'p' }, ranges: [{ type: 'SEMVER', events: [{ fixed: '1.1.0' }, { introduced: '1.5.0' }, { introduced: '0' }, { fixed: '1.7.0' }] }] }];
+  assert.equal(fixedFor(affected, 'p', '1.0.0'), '1.1.0');
+  assert.equal(fixedFor(affected, 'p', '1.6.0'), '1.7.0');
+  assert.equal(fixedFor(affected, 'p', '1.2.0'), undefined, 'not affected, so nothing fixes it');
+  // a range closed by last_affected names no fix
+  const last = [{ package: { name: 'p' }, ranges: [{ type: 'SEMVER', events: [{ introduced: '0' }, { last_affected: '1.6.0' }, { introduced: '2.0.0' }, { fixed: '2.1.0' }] }] }];
+  assert.equal(fixedFor(last, 'p', '1.0.0'), undefined);
+  assert.equal(fixedFor(last, 'p', '2.0.0'), '2.1.0');
+});
+
+test('a version named only in the explicit versions list does not erase the fix known from the ranges', async () => {
+  const both = {
+    id: 'GHSA-both',
+    affected: [{ package: { ecosystem: 'npm', name: 'p' }, versions: ['1.0.0'], ranges: [{ type: 'SEMVER', events: [{ introduced: '1.1.0' }, { fixed: '1.3.0' }] }] }],
+  };
+  const { findings } = await scanFloor('^1.0.0', [both]);
+  const f = findings.find((x) => x.kind === 'vuln')!;
+  assert.match(f.message, /which allows affected 1\.0\.0, 1\.1\.0, 1\.2\.0\)/);
+  assert.match(f.message, /Fixed in 1\.3\.0/);
+});
+
+test('an affected allowed version in a last_affected range leaves the Advisory without a fixed version', async () => {
+  const last = { id: 'GHSA-last', affected: range([{ introduced: '0' }, { fixed: '1.1.0' }, { introduced: '1.2.0' }, { last_affected: '1.2.0' }]) };
+  const { findings } = await scanFloor('^1.0.0', [last]);
+  const f = findings.find((x) => x.kind === 'vuln')!;
+  assert.match(f.message, /which allows affected 1\.0\.0, 1\.2\.0\)/);
+  assert.match(f.message, /No fixed version known/);
 });

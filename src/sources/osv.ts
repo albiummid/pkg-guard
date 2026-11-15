@@ -73,30 +73,18 @@ export function severityOf(d: any): Severity {
   return 'unknown';
 }
 
-/** First "fixed" version of the affected range that contains `version`. */
-export function fixedFor(affected: any[] | undefined, name: string, version: string): string | undefined {
-  for (const a of affected ?? []) {
-    if (a.package?.name !== name) continue;
-    for (const r of a.ranges ?? []) {
-      if (r.type !== 'SEMVER' && r.type !== 'ECOSYSTEM') continue;
-      let intro = '0';
-      for (const ev of r.events ?? []) {
-        if (ev.introduced !== undefined) intro = ev.introduced;
-        if (ev.fixed && compare(version, intro) >= 0 && compare(version, ev.fixed) < 0) return ev.fixed;
-      }
-    }
-  }
-  return undefined;
-}
-
 /** Version an OSV range event stands for ("0" is below every version). */
 const eventVersion = (ev: any): string | undefined => ev.introduced ?? ev.fixed ?? ev.last_affected;
 
-/** True when an OSV `affected` list covers `version` of `name`, through its explicit versions or its SEMVER / ECOSYSTEM ranges. */
-export function isAffected(affected: any[] | undefined, name: string, version: string): boolean {
+/**
+ * Where `version` of `name` falls in the SEMVER / ECOSYSTEM ranges of an OSV `affected` list (the explicit `versions` lists are not
+ * looked at). `inRange` when a range covers it; `fixed` is the event that closes the interval it is in, when that is a "fixed"
+ * (none when the interval is open or closed by "last_affected").
+ */
+function rangeMatch(affected: any[] | undefined, name: string, version: string): { inRange: boolean; fixed?: string } {
+  let inRange = false;
   for (const a of affected ?? []) {
     if (a.package?.name !== name) continue;
-    if (Array.isArray(a.versions) && a.versions.includes(version)) return true;
     for (const r of a.ranges ?? []) {
       if (r.type !== 'SEMVER' && r.type !== 'ECOSYSTEM') continue;
       // the evaluation in the OSV schema: walk the events in version order, opening at "introduced", closing at "fixed" or after "last_affected"
@@ -111,10 +99,25 @@ export function isAffected(affected: any[] | undefined, name: string, version: s
           hit = false;
         }
       }
-      if (hit) return true;
+      if (!hit) continue;
+      inRange = true;
+      // the first closing event after the version's introducing one
+      const close = events.find((ev: any) => ev.introduced === undefined && (ev.fixed !== undefined ? compare(version, ev.fixed) < 0 : compare(version, ev.last_affected) <= 0));
+      if (close?.fixed !== undefined) return { inRange, fixed: close.fixed };
     }
   }
-  return false;
+  return { inRange };
+}
+
+/** The "fixed" version closing the affected range that contains `version`; undefined when that range has none (open, or "last_affected"). */
+export function fixedFor(affected: any[] | undefined, name: string, version: string): string | undefined {
+  return rangeMatch(affected, name, version).fixed;
+}
+
+/** True when an OSV `affected` list covers `version` of `name`, through its explicit versions or its SEMVER / ECOSYSTEM ranges. */
+export function isAffected(affected: any[] | undefined, name: string, version: string): boolean {
+  if ((affected ?? []).some((a) => a.package?.name === name && Array.isArray(a.versions) && a.versions.includes(version))) return true;
+  return rangeMatch(affected, name, version).inRange;
 }
 
 export function toVuln(d: any, pkg: string, version: string): Vuln {
@@ -196,13 +199,21 @@ function fetchDetail(id: string): Promise<void> {
 
 /**
  * The Vulnerability of Advisory `d` across the allowed versions it affects, or undefined when it affects none. Its fixed version
- * clears all of them, so it is only known when each affected version has one.
+ * clears all of them: the highest fix of the ranges they fall in, known only when every such range has one and it is above each
+ * affected version. A version named only in the explicit `versions` list has no fix of its own, so it does not erase one.
  */
 function allowedVuln(d: any, p: Pkg): Vuln | undefined {
   const hit = (p.allowed ?? []).filter((v) => isAffected(d.affected, p.name, v)).sort(compare);
   if (!hit.length) return undefined;
-  const fixes = hit.map((v) => fixedFor(d.affected, p.name, v));
-  const fixedIn = fixes.every((f): f is string => !!f) ? fixes.reduce((a, b) => (compare(b, a) > 0 ? b : a)) : undefined;
+  let fixedIn: string | undefined;
+  let open = false;
+  for (const v of hit) {
+    const m = rangeMatch(d.affected, p.name, v);
+    if (!m.inRange) continue;
+    if (!m.fixed) open = true;
+    else if (!fixedIn || compare(m.fixed, fixedIn) > 0) fixedIn = m.fixed;
+  }
+  if (open || (fixedIn && compare(fixedIn, hit[hit.length - 1]) <= 0)) fixedIn = undefined;
   return { ...toVuln(d, p.name, p.version), fixedIn, affected: hit };
 }
 
