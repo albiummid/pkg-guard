@@ -507,7 +507,7 @@
         "pkgGuard.checkTransitive": {
           "type": "boolean",
           "default": true,
-          "description": "Also report vulnerabilities in transitive dependencies (needs a yarn.lock v1 or package-lock.json). They are shown on the direct dependency that pulls them in."
+          "description": "Also report vulnerabilities in transitive dependencies (needs a yarn.lock or package-lock.json). They are shown on the direct dependency that pulls them in."
         },
         "pkgGuard.refreshIntervalHours": {
           "type": "number",
@@ -550,7 +550,7 @@
         "pkgGuard.auditFallback": {
           "type": "boolean",
           "default": true,
-          "description": "If OSV.dev is unreachable, fall back to `yarn audit` / `npm audit`. These need the network too, a yarn.lock v1 or package-lock.json, and a trusted workspace. If the audit fails as well, the scan notes say so."
+          "description": "If OSV.dev is unreachable, fall back to `yarn audit` / `npm audit`. These need the network too, a yarn.lock or package-lock.json, and a trusted workspace. If the audit fails as well, the scan notes say so."
         },
         "pkgGuard.installAfterFix": {
           "type": "string",
