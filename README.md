@@ -15,6 +15,8 @@ Vulnerability warnings and update suggestions right inside your `package.json`, 
 - **Project actions** (tool window / sidebar): add or remove a dependency, fix every vulnerability at once, re-scan; plus a status bar summary of vulnerable and outdated dependencies and a "Needs attention" list.
 - Installs and Pins work with npm, yarn, pnpm and bun. Transitive vulnerability checks need `yarn.lock` v1, `package-lock.json` or `npm-shrinkwrap.json`; with a pnpm, bun or yarn berry lockfile only the direct dependencies are checked, and the scan notes say so. Advisories come from [OSV.dev](https://osv.dev), versions from the npm registry.
 
+Private registries: versions are looked up on the registry a package's scope maps to in `.npmrc` (`@scope:registry=`), and `registry=` replaces the default when the registry setting is left at the public npm registry. Credentials (`//host/path/:_authToken`, `:_auth`, `:username` with `:_password`, with `${VAR}` expansion) come from your user `.npmrc` (or `NPM_CONFIG_USERCONFIG`) and from `.npmrc` files in the project folder and its parents, are sent only to the registry whose key they match and never to OSV.dev, and a scoped package is never retried on the public registry. In an untrusted VS Code workspace the project `.npmrc` is ignored. Not supported: global `_auth` without a host key, client certificates, proxies and `npmrc` settings from `package.json`. The JetBrains plugin reads the user `.npmrc` only.
+
 ## Install
 
 | IDE | Package | Guide |

@@ -11,7 +11,7 @@ import { fetchInfo } from '@core/sources/registry';
 import { changelogBetween, fetchMeta, npmUrl } from '@core/sources/changelog';
 import { compare, diffKind, isStable } from '@core/versions/semver';
 import { generateUpgradeReport } from '@core/analysis/report';
-import { findProjects, readText, scanUri, settings, states } from '../services/store';
+import { findProjects, npmrcScope, readText, scanUri, settings, states } from '../services/store';
 import { ActionNode, DepNode, ProjectNode, ScriptNode, VersionNode } from '../views/tree';
 import { bumpTargets, newerVersions, previousVersion } from '@core/versions/bump';
 
@@ -76,6 +76,7 @@ function compatForNode(node: DepNode, info: RegistryInfo, target: string): Promi
     target,
     info,
     registry: settings().registry,
+    trusted: vscode.workspace.isTrusted,
     installed: states.get(node.uri.toString())?.result.installed,
   });
 }
@@ -95,7 +96,7 @@ async function pickVersion(node: DepNode, info: RegistryInfo, installed?: string
 async function updateFlow(node: DepNode, target: string | undefined, onlyReport = false): Promise<void> {
   const st = states.get(node.uri.toString()) ?? (await scanUri(node.uri));
   const installed = st?.result.installed.get(node.name);
-  const info = await fetchInfo(node.name, settings().registry);
+  const info = await fetchInfo(node.name, settings().registry, npmrcScope(node.uri));
   if (!info) return void vscode.window.showErrorMessage(`Could not read ${node.name} from the registry.`);
   const to = target ?? (await pickVersion(node, info, installed));
   if (!to) return;
@@ -123,15 +124,15 @@ async function updateFlow(node: DepNode, target: string | undefined, onlyReport 
 }
 
 async function openRepo(node: DepNode): Promise<void> {
-  const meta = await fetchMeta(node.name, settings().registry);
+  const meta = await fetchMeta(node.name, settings().registry, npmrcScope(node.uri));
   const url = meta?.repo ? (meta.repo.directory && meta.repo.host === 'github' ? `${meta.repo.url}/tree/HEAD/${meta.repo.directory}` : meta.repo.url) : meta?.homepage;
   if (!url) return void vscode.window.showWarningMessage(`${node.name} does not declare a repository.`);
   await openWeb(url);
 }
 
 /** Release notes for versions in (from, to] of one package, shown as a Markdown preview. */
-async function showNotes(name: string, from: string, to: string, title: string): Promise<void> {
-  const meta = await fetchMeta(name, settings().registry);
+async function showNotes(uri: vscode.Uri, name: string, from: string, to: string, title: string): Promise<void> {
+  const meta = await fetchMeta(name, settings().registry, npmrcScope(uri));
   if (!meta?.repo) return void openWeb(npmUrl(name));
   const repo = meta.repo;
   const releases = repo.host === 'github' ? `${repo.url}/releases` : repo.url;
@@ -149,10 +150,10 @@ async function showNotes(name: string, from: string, to: string, title: string):
 async function changelog(node: DepNode): Promise<void> {
   const st = states.get(node.uri.toString()) ?? (await scanUri(node.uri));
   const installed = st?.result.installed.get(node.name);
-  const info = await fetchInfo(node.name, settings().registry);
+  const info = await fetchInfo(node.name, settings().registry, npmrcScope(node.uri));
   const versions = info ? newerVersions(installed, info.versions) : [];
   if (!info || !installed || !versions.length) {
-    const meta = await fetchMeta(node.name, settings().registry);
+    const meta = await fetchMeta(node.name, settings().registry, npmrcScope(node.uri));
     const url = meta?.repo ? (meta.repo.host === 'github' ? `${meta.repo.url}/releases` : meta.repo.url) : npmUrl(node.name);
     return void openWeb(url);
   }
@@ -169,7 +170,7 @@ async function changelog(node: DepNode): Promise<void> {
   const pick = await vscode.window.showQuickPick(items, { placeHolder: `Changelog of ${node.name} (installed ${installed})`, matchOnDescription: true });
   if (!pick?.from || !pick.to) return;
   const single = pick.from !== installed || pick.to !== latest;
-  await showNotes(node.name, pick.from, pick.to, single && pick.to !== latest ? `${node.name} ${pick.to}` : `${node.name} ${installed} → ${pick.to}`);
+  await showNotes(node.uri, node.name, pick.from, pick.to, single && pick.to !== latest ? `${node.name} ${pick.to}` : `${node.name} ${installed} → ${pick.to}`);
 }
 
 function asDep(n: VersionNode): DepNode {
@@ -180,7 +181,7 @@ function asDep(n: VersionNode): DepNode {
 async function updateBump(node: DepNode, kind: BumpKind): Promise<void> {
   const st = states.get(node.uri.toString()) ?? (await scanUri(node.uri));
   const installed = st?.result.installed.get(node.name);
-  const info = await fetchInfo(node.name, settings().registry);
+  const info = await fetchInfo(node.name, settings().registry, npmrcScope(node.uri));
   const target = installed && info ? bumpTargets(installed, info.versions)[kind] : undefined;
   if (!target) return void vscode.window.showInformationMessage(`No ${kind} update available for ${node.name}.`);
   await updateFlow(node, target);
@@ -285,7 +286,7 @@ async function fixVulns(uri: vscode.Uri): Promise<void> {
 async function addDependency(uri: vscode.Uri): Promise<void> {
   const name = (await vscode.window.showInputBox({ prompt: 'Package to add', placeHolder: 'e.g. zod', validateInput: (v) => (v.trim() ? undefined : 'Enter a package name') }))?.trim();
   if (!name) return;
-  const info = await fetchInfo(name, settings().registry);
+  const info = await fetchInfo(name, settings().registry, npmrcScope(uri));
   const latest = info && latestStable(info);
   if (!latest) return void vscode.window.showErrorMessage(`Package "${name}" was not found in the registry.`);
   const section = await vscode.window.showQuickPick(['dependencies', 'devDependencies'], { placeHolder: `Add ${name}@^${latest} to…` });
@@ -338,7 +339,7 @@ export function registerCommands(ctx: vscode.ExtensionContext, refresh: () => vo
   reg('pkgGuard.openRepo', openRepo);
   reg('pkgGuard.changelog', changelog);
   reg('pkgGuard.updateLatest', async (n: DepNode) => {
-    const info = await fetchInfo(n.name, settings().registry);
+    const info = await fetchInfo(n.name, settings().registry, npmrcScope(n.uri));
     const latest = info && latestStable(info);
     if (!latest) return void vscode.window.showErrorMessage(`Could not read ${n.name} from the registry.`);
     await updateFlow(n, latest);
@@ -347,8 +348,8 @@ export function registerCommands(ctx: vscode.ExtensionContext, refresh: () => vo
   reg('pkgGuard.updateMinor', (n: DepNode) => updateBump(n, 'minor'));
   reg('pkgGuard.updateMajor', (n: DepNode) => updateBump(n, 'major'));
   reg('pkgGuard.updateVersion', (n: VersionNode) => updateFlow(asDep(n), n.version));
-  reg('pkgGuard.versionChangelog', (n: VersionNode) => showNotes(n.name, n.installed, n.version, `${n.name} ${n.installed} → ${n.version}`));
-  reg('pkgGuard.versionChangelogOnly', (n: VersionNode) => showNotes(n.name, previousVersion(n.version, states.get(n.uri.toString())?.result.info.get(n.name)?.versions ?? []) ?? n.installed, n.version, `${n.name} ${n.version}`));
+  reg('pkgGuard.versionChangelog', (n: VersionNode) => showNotes(n.uri, n.name, n.installed, n.version, `${n.name} ${n.installed} → ${n.version}`));
+  reg('pkgGuard.versionChangelogOnly', (n: VersionNode) => showNotes(n.uri, n.name, previousVersion(n.version, states.get(n.uri.toString())?.result.info.get(n.name)?.versions ?? []) ?? n.installed, n.version, `${n.name} ${n.version}`));
   reg('pkgGuard.updateTo', (n: DepNode) => updateFlow(n, undefined));
   reg('pkgGuard.checkCompat', (n: DepNode) => updateFlow(n, undefined, true));
   reg('pkgGuard.remove', remove);

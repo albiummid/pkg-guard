@@ -1,6 +1,8 @@
 // Line-delimited JSON-RPC over stdio, used by the JetBrains plugin. One request per line: {"id":1,"method":"scan","params":{...}}.
 // Replies are {"id":1,"result":...} or {"id":1,"error":"message"}. Anything else on stdout would corrupt the stream, so logs go to stderr.
+import * as path from 'path';
 import * as readline from 'readline';
+import { NpmrcScope } from './sources/npmrc';
 import { bumpTargets, newerVersions } from './versions/bump';
 import { formatReport } from './analysis/compat';
 import { generateUpgradeReport } from './analysis/report';
@@ -16,6 +18,11 @@ import { compare, isStable } from './versions/semver';
 import { DepEntry, Fix, ManifestFindings, PinRequest, RangeUpdate, Settings } from './types';
 
 type Params = Record<string, any>;
+
+/** Where a lookup reads .npmrc from: the manifest's folder when the host sends `pkgFile`, trusted only when the host says so. */
+function scopeOf(p: Params): NpmrcScope {
+  return { dir: typeof p.pkgFile === 'string' ? path.dirname(p.pkgFile) : undefined, trusted: p.trusted === true };
+}
 
 async function doScan(p: Params) {
   const settings = p.settings as Settings;
@@ -54,21 +61,21 @@ async function doUpgradeReport(p: Params) {
 }
 
 async function doCompat(p: Params) {
-  const info = await fetchInfo(p.name, p.registry);
+  const info = await fetchInfo(p.name, p.registry, scopeOf(p));
   if (!info) throw new Error(`Could not read ${p.name} from the registry.`);
   const installed = new Map<string, string>(Object.entries(p.installed ?? {}));
-  const report = await compatFor({ text: p.text, pkgFile: p.pkgFile, name: p.name, target: p.target, info, registry: p.registry, installed });
+  const report = await compatFor({ text: p.text, pkgFile: p.pkgFile, name: p.name, target: p.target, info, registry: p.registry, trusted: p.trusted, installed });
   return { ...report, text: formatReport(p.name, installed.get(p.name), p.target, report) };
 }
 
 async function doVersions(p: Params) {
-  const info = await fetchInfo(p.name, p.registry);
+  const info = await fetchInfo(p.name, p.registry, scopeOf(p));
   if (!info) return null;
   return { latest: latestStable(info), versions: info.versions.filter(isStable).sort((a, b) => compare(b, a)).slice(0, 80), deprecated: info.deprecated };
 }
 
 async function doChangelog(p: Params) {
-  const meta = await fetchMeta(p.name, p.registry);
+  const meta = await fetchMeta(p.name, p.registry, scopeOf(p));
   if (!meta?.repo) return { url: npmUrl(p.name) };
   const releases = meta.repo.host === 'github' ? `${meta.repo.url}/releases` : meta.repo.url;
   const res = await changelogBetween(p.name, meta.repo, p.from, p.to);
@@ -76,7 +83,7 @@ async function doChangelog(p: Params) {
 }
 
 async function doRepoUrl(p: Params) {
-  const meta = await fetchMeta(p.name, p.registry);
+  const meta = await fetchMeta(p.name, p.registry, scopeOf(p));
   const url = meta?.repo ? (meta.repo.directory && meta.repo.host === 'github' ? `${meta.repo.url}/tree/HEAD/${meta.repo.directory}` : meta.repo.url) : meta?.homepage;
   return { url: url ?? null, npm: npmUrl(p.name) };
 }

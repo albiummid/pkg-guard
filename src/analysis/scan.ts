@@ -190,7 +190,7 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
   if (s.enableOutdated) {
     const names = [...new Set(entries.filter((e) => result.installed.has(e.name) && !SKIP_RANGE.test(e.range)).map((e) => e.name))];
     await pool(names, 8, async (n) => {
-      const info = await fetchInfo(n, s.registry);
+      const info = await fetchInfo(n, s.registry, { dir: path.dirname(pkgFile), trusted: s.trusted });
       if (info) result.info.set(n, info);
     });
   }

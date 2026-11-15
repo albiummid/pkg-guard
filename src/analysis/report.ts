@@ -98,7 +98,7 @@ export async function collectCompat(text: string, pkgFile: string, r: ScanResult
         const info = r.info.get(j.name);
         if (!info) continue;
         try {
-          out.set(compatKey(j.name, j.target), await compatFor({ text, pkgFile, name: j.name, target: j.target, info, registry: s.registry, installed: r.installed }));
+          out.set(compatKey(j.name, j.target), await compatFor({ text, pkgFile, name: j.name, target: j.target, info, registry: s.registry, trusted: s.trusted, installed: r.installed }));
         } catch {
           /* leave unchecked */
         }

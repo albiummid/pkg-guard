@@ -1,8 +1,10 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { buildFindings } from '@core/analysis/findings';
 import { Finding, ScanResult, Settings } from '@core/types';
 import { scan } from '@core/analysis/scan';
+import { NpmrcScope } from '@core/sources/npmrc';
 
 export interface State {
   /** document version the scan was made from; -1 when scanned from disk */
@@ -50,9 +52,15 @@ export function settings(): Settings {
     minSeverity: c.get('minSeverity', 'low'),
     auditFallback: c.get('auditFallback', true) && vscode.workspace.isTrusted, // runs yarn/npm audit
     registry: c.get('registry', 'https://registry.npmjs.org'),
+    trusted: vscode.workspace.isTrusted, // a project .npmrc is only read in a trusted workspace
     ignoredAdvisories: c.get('ignoredAdvisories', []),
     ignoredPackages: c.get('ignoredPackages', []),
   };
+}
+
+/** Where a registry lookup for a manifest reads .npmrc from; the project's own file only counts in a trusted workspace. */
+export function npmrcScope(uri: vscode.Uri): NpmrcScope {
+  return { dir: path.dirname(uri.fsPath), trusted: vscode.workspace.isTrusted };
 }
 
 /** Text of a package.json: the editor buffer when it is open (may be unsaved), else the file on disk. */
