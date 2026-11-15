@@ -1,6 +1,6 @@
 package dev.pkgguard
 
-import com.intellij.ide.impl.isTrusted
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.State
@@ -44,7 +44,7 @@ class PkgGuardSettings : PersistentStateComponent<PkgGuardSettings.State> {
         state = s
     }
 
-    /** The `Settings` object of src/scan.ts. `yarn audit` / `npm audit` run code from the project, so they need a trusted project. */
+    /** The `Settings` object of src/types/scan.ts. `yarn audit` / `npm audit` run code from the project, so they need a trusted project. */
     fun forSidecar(project: Project): Map<String, Any> = mapOf(
         "enableVulnerabilities" to state.enableVulnerabilities,
         "checkTransitive" to state.checkTransitive,
@@ -52,7 +52,7 @@ class PkgGuardSettings : PersistentStateComponent<PkgGuardSettings.State> {
         "showMajorUpdates" to state.showMajorUpdates,
         "checkSync" to state.checkSync,
         "minSeverity" to state.minSeverity,
-        "auditFallback" to (state.auditFallback && project.isTrusted()),
+        "auditFallback" to (state.auditFallback && ProjectTrust.isTrusted(project)),
         "registry" to state.registry,
         "ignoredAdvisories" to state.ignoredAdvisories,
         "ignoredPackages" to state.ignoredPackages,
@@ -101,8 +101,12 @@ class PkgGuardConfigurable(private val project: Project) : BoundConfigurable("Pk
 
     override fun apply() {
         super.apply()
-        project.service<Sidecar>().restart() // the node path may have changed
-        project.service<PkgGuardService>().refreshAll(clearCaches = false)
+        // the node path may have changed; restart off the EDT, since it waits for the process lock
+        ApplicationManager.getApplication().executeOnPooledThread {
+            if (project.isDisposed) return@executeOnPooledThread
+            project.service<Sidecar>().restart()
+            project.service<PkgGuardService>().refreshAll(clearCaches = false)
+        }
         project.service<PkgGuardService>().schedulePeriodicRefresh()
     }
 }

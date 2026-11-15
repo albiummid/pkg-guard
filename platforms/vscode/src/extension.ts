@@ -7,12 +7,13 @@ import { install, offerInstall } from './services/install';
 import { clearOsvCache } from '@core/sources/osv';
 import { clearRegistryCache } from '@core/sources/registry';
 import { scan } from '@core/analysis/scan';
-import { findProjects, onDidChange, output, scanUri, settings, states } from './services/store';
+import { beginScan, cancelScans, commitScan, findProjects, onDidChange, output, scanUri, settings, states } from './services/store';
 import { PackagesTree } from './views/tree';
 import { registerImportWarnings } from './views/imports';
 
-const inflight = new Map<string, number>();
 const timers = new Map<string, NodeJS.Timeout>();
+/** documents whose scan is running right now */
+const running = new Set<string>();
 
 let diagnostics: vscode.DiagnosticCollection;
 let status: vscode.StatusBarItem;
@@ -22,8 +23,14 @@ const decos = {
   info: vscode.window.createTextEditorDecorationType({}),
 };
 
+/** A real package.json on disk: not a node_modules copy, and not a git / diff / untitled view of one. */
 function isPackageJson(doc: vscode.TextDocument): boolean {
-  return /[\\/]package\.json$/.test(doc.fileName) && !/[\\/]node_modules[\\/]/.test(doc.fileName);
+  return doc.uri.scheme === 'file' && /[\\/]package\.json$/.test(doc.fileName) && !/[\\/]node_modules[\\/]/.test(doc.fileName);
+}
+
+/** Escapes Markdown syntax in text that came from package.json or an advisory, so it renders as written. */
+function escapeMarkdown(s: string): string {
+  return s.replace(/[\\`*_{}[\]()#+\-.!|<>~]/g, '\\$&');
 }
 
 function toSeverity(s: Finding['level']): vscode.DiagnosticSeverity {
@@ -34,15 +41,21 @@ function schedule(doc: vscode.TextDocument, delay = 300): void {
   if (!isPackageJson(doc)) return;
   const key = doc.uri.toString();
   clearTimeout(timers.get(key));
-  timers.set(key, setTimeout(() => void run(doc), delay));
+  timers.set(
+    key,
+    setTimeout(() => {
+      timers.delete(key);
+      void run(doc);
+    }, delay),
+  );
 }
 
 async function run(doc: vscode.TextDocument): Promise<void> {
   const key = doc.uri.toString();
-  const ticket = (inflight.get(key) ?? 0) + 1;
-  inflight.set(key, ticket);
+  const seq = beginScan(key);
   const version = doc.version;
   const s = settings();
+  running.add(key);
   status.text = '$(sync~spin) Pkg Guard';
   status.show();
   let result: ScanResult;
@@ -50,11 +63,17 @@ async function run(doc: vscode.TextDocument): Promise<void> {
     result = await scan(doc.getText(), doc.uri.fsPath, s);
   } catch (e) {
     output.appendLine(`[${doc.fileName}] scan failed: ${e}`);
+    running.delete(key);
+    updateStatus(vscode.window.activeTextEditor); // leave the busy spinner
     return;
   }
-  if (inflight.get(key) !== ticket) return; // superseded by a newer scan
+  running.delete(key);
   const findings = buildFindings(result, s);
-  states.set(key, { version, result, findings });
+  // superseded by a newer scan (an edit, a re-scan, or the document was closed): its result is the newer one's to publish
+  if (!commitScan(key, seq, { version, result, findings })) {
+    updateStatus(vscode.window.activeTextEditor);
+    return;
+  }
   for (const n of result.notes) output.appendLine(`[${doc.fileName}] ${n}`);
   onDidChange.fire(); // the sidebar reads the same state
   publish(doc);
@@ -96,12 +115,13 @@ function decorate(ed: vscode.TextEditor): void {
         .join('  ');
       const md = new vscode.MarkdownString(undefined, true);
       md.isTrusted = { enabledCommands: ['pkgGuard.applyFix'] };
-      fs.forEach((f, fi) => {
+      fs.forEach((f) => {
         md.appendText(f.message + '\n');
-        f.fixes.forEach((fx, xi) => {
-          const args = encodeURIComponent(JSON.stringify([ed.document.uri.toString(), line, fi, xi]));
-          md.appendMarkdown(`\n[${fx.title}](command:pkgGuard.applyFix?${args})\n`);
-        });
+        for (const fx of f.fixes) {
+          // the link names the Finding and the Fix itself, not their position in a list that a re-scan may have reordered
+          const args = encodeURIComponent(JSON.stringify([ed.document.uri.toString(), line, f.kind, f.message, fx]));
+          md.appendMarkdown(`\n[${escapeMarkdown(fx.title)}](command:pkgGuard.applyFix?${args})\n`);
+        }
         md.appendMarkdown('\n---\n');
       });
       buckets[worst].push({
@@ -131,20 +151,37 @@ function updateStatus(ed: vscode.TextEditor | undefined): void {
 }
 
 async function applyFix(doc: vscode.TextDocument, f: Finding, fx: Fix): Promise<void> {
-  const effect = fixEffect(doc.getText(), f.entry, fx);
+  const effect = fixEffect(doc.getText(), f.entry, fx, doc.uri.fsPath);
   if (effect.type === 'setting') {
     const cfg = vscode.workspace.getConfiguration('pkgGuard');
-    await cfg.update(effect.key, [...new Set([...cfg.get<string[]>(effect.key, []), effect.value])], vscode.ConfigurationTarget.Workspace);
+    // only the workspace's own list: get() would merge in the user's list and copy it into shared workspace settings
+    const own = cfg.inspect<string[]>(effect.key)?.workspaceValue ?? [];
+    await cfg.update(effect.key, [...new Set([...own, effect.value])], vscode.ConfigurationTarget.Workspace);
     return;
   }
-  const pm = states.get(doc.uri.toString())?.result.pm;
+  const st = states.get(doc.uri.toString());
+  const pm = st?.result.pm;
   if (effect.type === 'install') {
     if (pm) await install(doc, pm);
     return;
   }
+  // The edit positions come from the scan: refuse when the document changed since, instead of editing the wrong text.
+  if (fx.type === 'setVersion') {
+    const at = doc.getText(new vscode.Range(f.entry.line, f.entry.versionStart, f.entry.line, f.entry.versionEnd));
+    if (st?.version !== doc.version || at !== f.entry.range) {
+      void vscode.window.showWarningMessage('package.json changed since it was scanned. Wait for the re-scan and try again.');
+      return;
+    }
+  }
+  const target = effect.file ? await vscode.workspace.openTextDocument(vscode.Uri.file(effect.file)) : doc;
+  if (effect.file && target.isDirty) {
+    void vscode.window.showWarningMessage(`Save ${vscode.workspace.asRelativePath(target.uri)} first: ${fx.title} is written there.`);
+    return;
+  }
   const we = new vscode.WorkspaceEdit();
-  for (const e of effect.edits) we.replace(doc.uri, doc.validateRange(new vscode.Range(e.startLine, e.startChar, e.endLine, e.endChar)), e.newText);
+  for (const e of effect.edits) we.replace(target.uri, target.validateRange(new vscode.Range(e.startLine, e.startChar, e.endLine, e.endChar)), e.newText);
   await vscode.workspace.applyEdit(we);
+  if (effect.file) await target.save(); // a pin lives in the workspace root's package.json; the install must see it
   if (pm) await offerInstall(doc, pm);
 }
 
@@ -156,7 +193,7 @@ class Fixer implements vscode.CodeActionProvider {
     for (const f of st.findings) {
       if (f.entry.line < range.start.line || f.entry.line > range.end.line) continue;
       for (const fx of f.fixes) {
-        const a = new vscode.CodeAction(fx.title, fx.type === 'setVersion' || fx.type === 'addOverride' || fx.type === 'install' ? vscode.CodeActionKind.QuickFix : vscode.CodeActionKind.Empty);
+        const a = new vscode.CodeAction(fx.title, vscode.CodeActionKind.QuickFix);
         a.isPreferred = (fx.type === 'setVersion' && f.kind === 'vuln') || (fx.type === 'install' && f.kind === 'unsynced');
         a.command = { command: 'pkgGuard.runFix', title: fx.title, arguments: [doc.uri.toString(), f.entry.line, f.kind, f.message, fx] };
         acts.push(a);
@@ -168,12 +205,13 @@ class Fixer implements vscode.CodeActionProvider {
 
 export function activate(ctx: vscode.ExtensionContext): void {
   diagnostics = vscode.languages.createDiagnosticCollection('pkg-guard');
-  status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
+  status = vscode.window.createStatusBarItem('pkgGuard.status', vscode.StatusBarAlignment.Left, 0);
+  status.name = 'Pkg Guard';
   status.command = 'pkgGuard.refresh';
   ctx.subscriptions.push(diagnostics, output, status, decos.error, decos.warning, decos.info, onDidChange);
 
   const tree = new PackagesTree();
-  ctx.subscriptions.push(vscode.window.createTreeView('pkgGuard.packages', { treeDataProvider: tree, showCollapseAll: true }));
+  ctx.subscriptions.push(tree, vscode.window.createTreeView('pkgGuard.packages', { treeDataProvider: tree, showCollapseAll: true }));
 
   const refreshAll = (clear: boolean) => {
     if (clear) {
@@ -189,7 +227,19 @@ export function activate(ctx: vscode.ExtensionContext): void {
     void findProjects().then((files) => files.filter((u) => !open.has(u.toString())).forEach((u) => void scanUri(u)));
     tree.refresh();
   };
-  registerCommands(ctx, () => refreshAll(true));
+  // "Re-scan" of one project fetches fresh advisory and registry data and republishes an open editor, like the global refresh does
+  registerCommands(
+    ctx,
+    () => refreshAll(true),
+    (uri) => {
+      clearOsvCache();
+      clearRegistryCache();
+      const doc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
+      if (doc && isPackageJson(doc)) schedule(doc, 0);
+      else void scanUri(uri);
+      tree.refresh();
+    },
+  );
 
   // new advisories are published all the time; without this a window left open never sees them
   let periodic: NodeJS.Timeout | undefined;
@@ -209,19 +259,24 @@ export function activate(ctx: vscode.ExtensionContext): void {
       const f = states.get(uri)?.findings.find((x) => x.entry.line === line && x.kind === kind && x.message === message);
       if (f) await applyFix(doc, f, fx);
     }),
-    vscode.commands.registerCommand('pkgGuard.applyFix', async (uri: string, line: number, fi: number, xi: number) => {
-      const st = states.get(uri);
-      const lineFindings = st?.findings.filter((x) => x.entry.line === line).sort((a, b) => RANK[b.level] - RANK[a.level]);
-      const f = lineFindings?.[fi];
-      const fx = f?.fixes[xi];
-      if (!f || !fx) return;
+    vscode.commands.registerCommand('pkgGuard.applyFix', async (uri: string, line: number, kind: string, message: string, fx: Fix) => {
+      const f = states.get(uri)?.findings.find((x) => x.entry.line === line && x.kind === kind && x.message === message);
+      if (!f) return void vscode.window.showWarningMessage('The findings changed since this hover was shown. Hover the line again.');
       await applyFix(await vscode.workspace.openTextDocument(vscode.Uri.parse(uri)), f, fx);
     }),
-    vscode.languages.registerCodeActionsProvider({ pattern: '**/package.json' }, new Fixer(), { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }),
+    vscode.languages.registerCodeActionsProvider({ scheme: 'file', pattern: '**/package.json' }, new Fixer(), { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }),
     vscode.workspace.onDidOpenTextDocument((d) => schedule(d, 0)),
     vscode.workspace.onDidSaveTextDocument((d) => schedule(d, 0)),
-    // keep the state: the sidebar still shows this project
-    vscode.workspace.onDidCloseTextDocument((d) => diagnostics.delete(d.uri)),
+    // keep the state: the sidebar still shows this project. A scan still running for the closed document must not bring its diagnostics back.
+    vscode.workspace.onDidCloseTextDocument((d) => {
+      const key = d.uri.toString();
+      clearTimeout(timers.get(key));
+      timers.delete(key);
+      cancelScans(key);
+      diagnostics.delete(d.uri);
+    }),
+    // granting trust turns the audit fallback (and installs) on: results made without it are out of date
+    vscode.workspace.onDidGrantWorkspaceTrust(() => refreshAll(false)),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('pkgGuard.refreshIntervalHours')) schedulePeriodic();
       if (e.affectsConfiguration('pkgGuard')) refreshAll(false);
@@ -244,6 +299,10 @@ export function activate(ctx: vscode.ExtensionContext): void {
   let watchTimer: NodeJS.Timeout | undefined;
   const onFile = (u: vscode.Uri) => {
     if (/[\\/]node_modules[\\/]/.test(u.fsPath)) return;
+    // a package.json saved from an open editor is already being scanned by the save handler
+    const key = u.toString();
+    const doc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === key);
+    if (doc && /package\.json$/.test(u.fsPath) && (running.has(key) || timers.has(key) || states.get(key)?.version === doc.version)) return;
     clearTimeout(watchTimer); // an install touches many files at once
     watchTimer = setTimeout(() => refreshAll(false), 500);
   };
@@ -257,4 +316,5 @@ export function activate(ctx: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   for (const t of timers.values()) clearTimeout(t);
+  timers.clear();
 }

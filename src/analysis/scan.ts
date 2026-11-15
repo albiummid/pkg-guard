@@ -12,10 +12,24 @@ import { DepEntry, PackageManager, RegistryInfo, ScanResult, Settings } from '..
 
 export const SKIP_RANGE = /^(workspace:|file:|link:|git|http|npm:|github:|portal:|patch:|catalog:)|\//;
 
-function findLock(dir: string): { file: string; kind: 'yarn' | 'npm' } | null {
+/** Lockfile names in the order the package manager is detected (see detectPm), with the manager each belongs to. */
+const LOCKFILES: { file: string; pm: PackageManager['name']; readable: 'yarn' | 'npm' | null }[] = [
+  { file: 'pnpm-lock.yaml', pm: 'pnpm', readable: null },
+  { file: 'yarn.lock', pm: 'yarn', readable: 'yarn' },
+  { file: 'bun.lock', pm: 'bun', readable: null },
+  { file: 'bun.lockb', pm: 'bun', readable: null },
+  { file: 'package-lock.json', pm: 'npm', readable: 'npm' },
+  { file: 'npm-shrinkwrap.json', pm: 'npm', readable: 'npm' },
+];
+
+const exists = (p: string): Promise<boolean> => fs.promises.access(p).then(() => true, () => false);
+
+/** The nearest lockfile of any package manager. `kind` is null for the ones this tool cannot read. */
+async function findLock(dir: string): Promise<{ file: string; kind: 'yarn' | 'npm' | null; pm: PackageManager['name'] } | null> {
   for (let d = dir; ; d = path.dirname(d)) {
-    if (fs.existsSync(path.join(d, 'yarn.lock'))) return { file: path.join(d, 'yarn.lock'), kind: 'yarn' };
-    if (fs.existsSync(path.join(d, 'package-lock.json'))) return { file: path.join(d, 'package-lock.json'), kind: 'npm' };
+    for (const l of LOCKFILES) {
+      if (await exists(path.join(d, l.file))) return { file: path.join(d, l.file), kind: l.readable, pm: l.pm };
+    }
     if (path.dirname(d) === d) return null;
   }
 }
@@ -32,13 +46,21 @@ export function readInstalledPkg(dir: string, name: string): any | undefined {
   }
 }
 
-function installedFromNodeModules(dir: string, name: string): string | undefined {
-  return readInstalledPkg(dir, name)?.version;
+/** Same lookup as readInstalledPkg without blocking the host's thread; the scan reads one file per dependency. */
+async function installedFromNodeModules(dir: string, name: string): Promise<string | undefined> {
+  for (let d = dir; ; d = path.dirname(d)) {
+    try {
+      return JSON.parse(await fs.promises.readFile(path.join(d, 'node_modules', name, 'package.json'), 'utf8'))?.version;
+    } catch {
+      /* keep walking up */
+    }
+    if (path.dirname(d) === d) return undefined;
+  }
 }
 
-function hasNodeModules(dir: string): boolean {
+async function hasNodeModules(dir: string): Promise<boolean> {
   for (let d = dir; ; d = path.dirname(d)) {
-    if (fs.existsSync(path.join(d, 'node_modules'))) return true;
+    if (await exists(path.join(d, 'node_modules'))) return true;
     if (path.dirname(d) === d) return false;
   }
 }
@@ -65,31 +87,63 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
   }
   const dir = path.dirname(pkgFile);
   result.pm = detectPm(dir, pkg);
+  // A Pin goes to the workspace root manifest, so what that manifest declares decides whether a Pin is safe.
+  if (result.pm.root) {
+    const rootManifest = path.join(result.pm.root, 'package.json');
+    if (path.resolve(rootManifest) !== path.resolve(pkgFile)) {
+      try {
+        const root = JSON.parse(await fs.promises.readFile(rootManifest, 'utf8'));
+        result.rootDeclared = new Set([root.dependencies, root.devDependencies, root.optionalDependencies].flatMap((s) => Object.keys(s ?? {})));
+      } catch {
+        /* no readable root manifest: nothing extra to protect */
+      }
+    }
+  }
   const rootDeps: Record<string, string> = {
     ...pkg.optionalDependencies,
     ...pkg.devDependencies,
     ...pkg.dependencies,
   };
 
+  // dependencies that exist in the manifest but could not be located on one line cannot get Findings
+  const located = new Set(entries.map((e) => e.name));
+  const unlocated = Object.keys(rootDeps).filter((n) => !located.has(n));
+  if (unlocated.length) notes.push(`${unlocated.length} ${unlocated.length === 1 ? 'dependency' : 'dependencies'} could not be located on a line of package.json and ${unlocated.length === 1 ? 'is' : 'are'} not checked: ${unlocated.join(', ')}`);
+
   // 1. resolve what is actually installed (lockfile > node_modules > range)
   let graph: Graph | null = null;
-  const lock = findLock(dir);
-  try {
-    if (lock?.kind === 'yarn') graph = buildYarnGraph(fs.readFileSync(lock.file, 'utf8'), rootDeps);
-    if (lock?.kind === 'npm') graph = buildNpmGraph(JSON.parse(fs.readFileSync(lock.file, 'utf8')), rootDeps);
-  } catch (e) {
-    notes.push(`could not read lockfile: ${e}`);
+  const lock = await findLock(dir);
+  if (lock && lock.pm !== result.pm.name) {
+    notes.push(`${path.basename(lock.file)} belongs to ${lock.pm}, not ${result.pm.name}; it was ignored and transitive vulnerability checks are off`);
+  } else if (lock && !lock.kind) {
+    notes.push(`${path.basename(lock.file)} is not supported yet; transitive vulnerability checks are off`);
+  } else if (lock) {
+    try {
+      const text = await fs.promises.readFile(lock.file, 'utf8');
+      if (lock.kind === 'yarn') graph = buildYarnGraph(text, rootDeps);
+      else {
+        // a workspace member resolves its own nested copies before the root's
+        const rel = path.relative(path.dirname(lock.file), dir).split(path.sep).join('/');
+        graph = buildNpmGraph(JSON.parse(text), rootDeps, rel.startsWith('..') ? '' : rel);
+      }
+    } catch (e) {
+      notes.push(`could not read lockfile: ${e}`);
+    }
+    if (!graph) notes.push('lockfile format not supported (yarn berry / package-lock v1?); transitive checks disabled');
   }
-  if (lock && !graph) notes.push('lockfile format not supported (yarn berry / package-lock v1?); transitive checks disabled');
   const g: Graph = graph ?? { kind: 'none', nodes: new Map(), roots: new Map() };
   result.lock = g.kind;
+  result.copies = new Map();
+  for (const n of g.nodes.values()) result.copies.set(n.name, [...(result.copies.get(n.name) ?? []), n.version]);
   const from = (result.installedFrom = new Map());
   const onDisk = (result.onDisk = new Map<string, string>());
-  result.hasNodeModules = hasNodeModules(dir);
-  for (const e of entries) {
+  result.hasNodeModules = await hasNodeModules(dir);
+  // one read per dependency, all at once, instead of one blocking read after another
+  const disks = await Promise.all(entries.map((e) => installedFromNodeModules(dir, e.name)));
+  for (const [i, e] of entries.entries()) {
     const rid = g.roots.get(e.name);
     const locked = rid ? g.nodes.get(rid)?.version : undefined;
-    const disk = installedFromNodeModules(dir, e.name);
+    const disk = disks[i];
     if (disk) onDisk.set(e.name, disk);
     const floor = SKIP_RANGE.test(e.range) ? undefined : baseVersion(e.range) ?? undefined;
     const v = locked || disk || floor;
@@ -105,6 +159,9 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
     }
   }
 
+  const unknown = entries.filter((e) => !result.installed.has(e.name) && !SKIP_RANGE.test(e.range)).map((e) => e.name);
+  if (unknown.length) notes.push(`no version is known for ${unknown.length} ${unknown.length === 1 ? 'dependency' : 'dependencies'} (a tag, a union or another range with no lowest version, and nothing installed), so ${unknown.length === 1 ? 'it was' : 'they were'} not checked: ${unknown.join(', ')}`);
+
   // 2. vulnerabilities
   if (s.enableVulnerabilities) {
     try {
@@ -116,11 +173,12 @@ export async function scan(text: string, pkgFile: string, s: Settings): Promise<
     } catch (e) {
       if (s.auditFallback && g.kind !== 'none') {
         try {
+          // runAudit only returns a complete report; anything else throws, so a failed audit is never taken for "no vulnerabilities"
           result.hits = await runAudit(g.kind, path.dirname(lock!.file));
           result.source = 'audit';
           notes.push(`OSV.dev unreachable (${e}); used ${g.kind} audit instead`);
         } catch (e2) {
-          notes.push(`vulnerability check failed: ${e2}`);
+          notes.push(`vulnerability check failed: OSV.dev unreachable (${e}) and the ${g.kind} audit failed too (${e2})`);
         }
       } else {
         notes.push(`vulnerability check failed: ${e}`);

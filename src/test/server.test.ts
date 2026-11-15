@@ -56,7 +56,9 @@ test('server: upgradeReport offline returns a report and markdown', async () => 
 
 test('server: scan offline returns findings, installed versions and pm', async () => {
   const settings = { enableVulnerabilities: false, checkTransitive: false, enableOutdated: false, showMajorUpdates: false, minSeverity: 'low', auditFallback: false, registry: 'https://registry.npmjs.org', ignoredAdvisories: [], ignoredPackages: [] };
-  const r = JSON.parse(await handle(JSON.stringify({ id: 4, method: 'scan', params: { text: PKG, pkgFile: 'D:/nowhere/package.json', settings } })));
+  // a declared packageManager decides before any lockfile in a parent folder (the repo, and some home folders, have a yarn.lock)
+  const text = PKG.replace('{\n', '{\n  "packageManager": "npm@10.0.0",\n');
+  const r = JSON.parse(await handle(JSON.stringify({ id: 4, method: 'scan', params: { text, pkgFile: 'D:/nowhere/package.json', settings } })));
   assert.equal(r.result.entries.length, 2);
   assert.equal(r.result.installed['left-pad'], '1.0.0');
   assert.deepEqual(r.result.findings, []);

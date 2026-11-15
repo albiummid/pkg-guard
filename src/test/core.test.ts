@@ -46,7 +46,8 @@ const PKG = `{
 
 test('locateDeps finds entries with exact columns and ignores other sections', () => {
   const e = locateDeps(PKG);
-  assert.deepEqual(e.map((x) => x.name), ['lodash', '@nestjs/core']);
+  assert.deepEqual(e.map((x) => x.name), ['lodash', '@nestjs/core', 'jest']); // the one-line devDependencies section is located too
+  assert.ok(!e.some((x) => x.name === 'uuid')); // resolutions is not a dependency section
   const lodash = e[0];
   const line = PKG.split('\n')[lodash.line];
   assert.equal(line.slice(lodash.versionStart, lodash.versionEnd), '4.17.21');
@@ -55,7 +56,9 @@ test('locateDeps finds entries with exact columns and ignores other sections', (
 
 test('locateDeps handles a one-line section', () => {
   const t = '{\n  "devDependencies": { "jest": "30.0.0" }\n}\n';
-  assert.equal(locateDeps(t).length, 0); // single-line sections are not located (no fix applied blindly)
+  const [jest] = locateDeps(t);
+  assert.equal(jest.name, 'jest');
+  assert.equal(t.split('\n')[jest.line].slice(jest.versionStart, jest.versionEnd), '30.0.0');
 });
 
 test('addToSection keeps CRLF, indent and trailing newline', () => {

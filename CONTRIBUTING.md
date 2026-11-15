@@ -32,7 +32,7 @@ If you add or change a sidecar method, update the Kotlin types in `platforms/jet
 
 ## Setup
 
-Requirements: Node.js 24, yarn 1.x, and JDK 17 (JetBrains plugin only).
+Requirements: Node.js 24, yarn 1.x, and JDK 21 (JetBrains plugin only; the oldest supported IDE needs Java 21 to build against).
 
 ```bash
 yarn install                                         # root CLI and VS Code workspace tools

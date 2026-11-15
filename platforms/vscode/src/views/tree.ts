@@ -40,14 +40,21 @@ function level(fs: Finding[]): 'error' | 'warning' | 'info' | null {
   return fs.length ? 'info' : null;
 }
 
-export class PackagesTree implements vscode.TreeDataProvider<Node> {
+export class PackagesTree implements vscode.TreeDataProvider<Node>, vscode.Disposable {
   private readonly emitter = new vscode.EventEmitter<Node | undefined>();
   readonly onDidChangeTreeData = this.emitter.event;
   private timer: NodeJS.Timeout | undefined;
+  private readonly subscription: vscode.Disposable;
 
   constructor() {
     // scans finish asynchronously; coalesce the resulting change events
-    onDidChange.event(() => this.refresh());
+    this.subscription = onDidChange.event(() => this.refresh());
+  }
+
+  dispose(): void {
+    clearTimeout(this.timer);
+    this.subscription.dispose();
+    this.emitter.dispose();
   }
 
   refresh(): void {
@@ -66,7 +73,7 @@ export class PackagesTree implements vscode.TreeDataProvider<Node> {
   async getChildren(el?: Node): Promise<Node[]> {
     if (!el) {
       const files = await findProjects();
-      if (!files.length) return [{ kind: 'message', label: 'No package.json found in this workspace' }];
+      if (!files.length) return []; // an empty tree shows the view's welcome content
       const projects = files.map((uri) => {
         if (!states.has(uri.toString())) void scanUri(uri);
         return { kind: 'project', uri, name: this.load(uri)?.name ?? path.basename(path.dirname(uri.fsPath)), duplicate: false } as ProjectNode;

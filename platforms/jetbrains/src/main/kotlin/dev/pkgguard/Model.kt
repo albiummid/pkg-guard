@@ -1,6 +1,6 @@
 package dev.pkgguard
 
-// JSON shapes of the Node sidecar (core/src/server/server.ts). Optional fields are nullable because Gson leaves missing ones null.
+// JSON shapes of the Node sidecar (src/server.ts). Optional fields are nullable because Gson leaves missing ones null.
 
 data class Entry(
     val name: String,
@@ -58,6 +58,8 @@ data class ScanResponse(
     val findings: List<Finding>,
     val info: Map<String, VersionInfo>,
     val bumps: Map<String, Bump>,
+    /** Stable versions newer than the installed one, newest first, as the core worked them out. */
+    val newer: Map<String, List<String>> = emptyMap(),
     val lock: String,
     val pm: Pm,
     val source: String,
@@ -66,8 +68,8 @@ data class ScanResponse(
 
 data class TextEdit(val startLine: Int, val startChar: Int, val endLine: Int, val endChar: Int, val newText: String)
 
-/** `type` is edit | setting | install. */
-data class FixEffect(val type: String, val edits: List<TextEdit>? = null, val key: String? = null, val value: String? = null)
+/** `type` is edit | setting | install. `file` is set when the edits belong to another manifest than the scanned one (a Pin goes to the workspace root). */
+data class FixEffect(val type: String, val edits: List<TextEdit>? = null, val key: String? = null, val value: String? = null, val file: String? = null)
 
 data class Issue(val level: String, val text: String)
 

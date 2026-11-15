@@ -12,7 +12,7 @@ Vulnerability warnings and update suggestions right inside your `package.json`, 
 - **One-click fixes**: update to the fixed version, pin a transitive package via `resolutions` / `overrides`, ignore an advisory.
 - **Compatibility check** before an update: peer dependencies, `engines.node`, and companion updates for packages that would break.
 - **Changelog** between your installed version and the target.
-- Works with npm, yarn, pnpm and bun. Advisories come from [OSV.dev](https://osv.dev), versions from the npm registry.
+- Installs and Pins work with npm, yarn, pnpm and bun. Transitive vulnerability checks need `yarn.lock` v1, `package-lock.json` or `npm-shrinkwrap.json`; with a pnpm, bun or yarn berry lockfile only the direct dependencies are checked, and the scan notes say so. Advisories come from [OSV.dev](https://osv.dev), versions from the npm registry.
 
 ## Install
 

@@ -6,6 +6,12 @@ interface YarnPkg {
   deps: Record<string, string>;
 }
 
+/** Package name of a yarn.lock key. An alias (`cjs@npm:string-width@^4`) is named after the package it installs, not the alias. */
+function nameOfSpec(spec: string): string {
+  const alias = /@npm:(@?[^@]+)@[^@]*$/.exec(spec);
+  return alias ? alias[1] : spec.slice(0, spec.lastIndexOf('@'));
+}
+
 /** Parses yarn classic (v1) lockfiles. Returns null for yarn berry. */
 export function parseYarnLock(text: string): Map<string, YarnPkg> | null {
   if (/^__metadata:/m.test(text)) return null;
@@ -29,8 +35,7 @@ export function parseYarnLock(text: string): Map<string, YarnPkg> | null {
         .replace(/:\s*$/, '')
         .split(',')
         .map((s) => s.trim().replace(/^"|"$/g, ''));
-      const at = specs[0].lastIndexOf('@');
-      cur = { specs, pkg: { name: specs[0].slice(0, at), version: '', deps: {} } };
+      cur = { specs, pkg: { name: nameOfSpec(specs[0]), version: '', deps: {} } };
       continue;
     }
     if (!cur) continue;
@@ -73,15 +78,20 @@ export function buildYarnGraph(text: string, rootDeps: Record<string, string>): 
   return { kind: 'yarn', nodes, roots };
 }
 
-/** package-lock.json lockfileVersion 2/3. Returns null for v1 or unreadable. */
-export function buildNpmGraph(json: any, rootDeps: Record<string, string>): Graph | null {
+/**
+ * package-lock.json lockfileVersion 2/3. Returns null for v1 or unreadable.
+ * `from` is the lockfile key of the manifest being scanned ('' for the root, 'packages/api' for a workspace member): its dependencies
+ * resolve to the member's own node_modules first, then the root's, the way Node resolves them.
+ */
+export function buildNpmGraph(json: any, rootDeps: Record<string, string>, from = ''): Graph | null {
   const pk = json?.packages;
   if (!pk || typeof pk !== 'object') return null;
   const nodes = new Map<string, GNode>();
   for (const [key, p] of Object.entries<any>(pk)) {
     // Workspace members sit under their folder (e.g. "packages/api"), not node_modules, and are not registry packages.
     if (!key || p.link || !p.version || !key.includes('node_modules/')) continue;
-    const name = key.slice(key.lastIndexOf('node_modules/') + 'node_modules/'.length);
+    // an alias entry records the real package name; otherwise the name is the folder
+    const name: string = typeof p.name === 'string' && p.name ? p.name : key.slice(key.lastIndexOf('node_modules/') + 'node_modules/'.length);
     nodes.set(key, { id: key, name, version: p.version, deps: [] });
   }
   const resolve = (dep: string, from: string): string | undefined => {
@@ -96,14 +106,15 @@ export function buildNpmGraph(json: any, rootDeps: Record<string, string>): Grap
   };
   for (const [key, node] of nodes) {
     const p = pk[key];
-    for (const d of Object.keys({ ...p.dependencies, ...p.optionalDependencies })) {
+    // npm 7+ installs peer dependencies, so they are part of the tree
+    for (const d of Object.keys({ ...p.dependencies, ...p.optionalDependencies, ...p.peerDependencies })) {
       const t = resolve(d, key);
-      if (t) node.deps.push(t);
+      if (t && !node.deps.includes(t)) node.deps.push(t);
     }
   }
   const roots = new Map<string, string>();
   for (const d of Object.keys(rootDeps)) {
-    const t = resolve(d, '');
+    const t = resolve(d, from);
     if (t) roots.set(d, t);
   }
   return { kind: 'npm', nodes, roots };

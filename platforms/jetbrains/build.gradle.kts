@@ -1,9 +1,11 @@
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
+import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "2.0.21"
-    id("org.jetbrains.intellij.platform") version "2.2.1"
+    id("org.jetbrains.intellij.platform") version "2.10.5"
 }
 
 group = "dev.pkgguard"
@@ -14,15 +16,28 @@ repositories {
     intellijPlatform { defaultRepositories() }
 }
 
+// The tests only need plain JUnit 4 (no IDE fixtures), which the IDE distribution ships.
+val junit4Jar = provider { intellijPlatform.platformPath.resolve("lib/junit4.jar").toFile() }
+
 dependencies {
     intellijPlatform {
         // WebStorm has the same platform + JSON modules; develop against IDEA Community for a smaller download.
         create(IntelliJPlatformType.IntellijIdeaCommunity, providers.gradleProperty("pkgguard.ideaVersion").get())
         pluginVerifier()
     }
+    testImplementation(files(junit4Jar))
 }
 
-kotlin { jvmToolchain(providers.gradleProperty("pkgguard.jvm").get().toInt()) }
+kotlin {
+    jvmToolchain(providers.gradleProperty("pkgguard.jvm").get().toInt())
+    compilerOptions {
+        // The plugin ships no Kotlin standard library of its own; it uses the one in the IDE. IDE 242, the oldest supported build,
+        // bundles 1.9.24, so the code may only call standard library functions that exist there (a newer one would fail at runtime
+        // with NoSuchMethodError, which the plugin verifier does not see). The language level can be newer: it needs no library.
+        apiVersion.set(KotlinVersion.KOTLIN_1_9)
+        languageVersion.set(KotlinVersion.KOTLIN_2_0)
+    }
+}
 
 // The Node sidecar and the change notes come from the root CLI.
 val isWindows = System.getProperty("os.name").lowercase().contains("win")
@@ -52,12 +67,21 @@ intellijPlatform {
         password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
     }
     publishing { token = providers.environmentVariable("PUBLISH_TOKEN") }
-    // Oldest supported IDE and the last standalone IDEA Community release (2025.3+ ships as unified IntelliJ IDEA,
-    // which this Gradle plugin version cannot resolve, so `recommended()` fails).
+    // The plugin has no upper build limit, so the newest release is verified too: the oldest supported IDE, the last standalone
+    // IDEA Community (2025.2) and the newest unified IntelliJ IDEA. Raise the last one when a new IDE is released.
     pluginVerification {
+        // Deprecated or internal API usage and compatibility problems fail the build instead of only being reported.
+        failureLevel = listOf(
+            VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
+            VerifyPluginTask.FailureLevel.DEPRECATED_API_USAGES,
+            VerifyPluginTask.FailureLevel.INTERNAL_API_USAGES,
+            VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
+            VerifyPluginTask.FailureLevel.MISSING_DEPENDENCIES,
+        )
         ides {
-            ide(IntelliJPlatformType.IntellijIdeaCommunity, providers.gradleProperty("pkgguard.ideaVersion").get())
-            ide(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.4")
+            create(IntelliJPlatformType.IntellijIdeaCommunity, providers.gradleProperty("pkgguard.ideaVersion").get())
+            create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.4")
+            create(IntelliJPlatformType.IntellijIdea, "2026.3")
         }
     }
 }

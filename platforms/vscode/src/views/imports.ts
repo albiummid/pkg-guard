@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { importFindings } from '@core/imports/findings';
+import { createManifestLookup } from '@core/imports/manifestLookup';
 import { ImportFinding, ManifestFindings } from '@core/types';
 import { onDidChange, scanUri, states } from '../services/store';
 
@@ -17,18 +18,16 @@ function enabled(): boolean {
   return vscode.workspace.getConfiguration('pkgGuard').get('importWarnings', true);
 }
 
+const lookup = createManifestLookup(fs.existsSync);
+
 /** The package.jsons above a source file, nearest first, up to its workspace folder. Scans the ones not scanned yet. */
 async function manifestsFor(doc: vscode.TextDocument): Promise<ManifestFindings[]> {
   const top = vscode.workspace.getWorkspaceFolder(doc.uri)?.uri.fsPath;
   const out: ManifestFindings[] = [];
-  for (let d = path.dirname(doc.uri.fsPath); ; d = path.dirname(d)) {
-    const file = path.join(d, 'package.json');
-    if (fs.existsSync(file)) {
-      const uri = vscode.Uri.file(file);
-      const st = states.get(uri.toString()) ?? (await scanUri(uri));
-      if (st) out.push({ entries: st.result.entries, findings: st.findings });
-    }
-    if (d === top || path.dirname(d) === d) break;
+  for (const file of lookup.above(path.dirname(doc.uri.fsPath), top)) {
+    const uri = vscode.Uri.file(file);
+    const st = states.get(uri.toString()) ?? (await scanUri(uri));
+    if (st) out.push({ entries: st.result.entries, findings: st.findings });
   }
   return out;
 }
@@ -103,7 +102,18 @@ export function registerImportWarnings(ctx: vscode.ExtensionContext): void {
   };
   const scheduleAll = () => vscode.workspace.textDocuments.forEach((d) => schedule(d));
 
+  // a package.json created, deleted or moved changes which manifest is nearest
+  const manifests = vscode.workspace.createFileSystemWatcher('**/package.json', false, true, false);
+  manifests.onDidCreate(() => lookup.invalidate());
+  manifests.onDidDelete(() => lookup.invalidate());
+  // folder deletes and moves arrive as one event that the glob above may not match
+  const folderChanged = () => lookup.invalidate();
+
   ctx.subscriptions.push(
+    manifests,
+    vscode.workspace.onDidDeleteFiles(folderChanged),
+    vscode.workspace.onDidRenameFiles(folderChanged),
+    vscode.workspace.onDidChangeWorkspaceFolders(folderChanged),
     diagnostics,
     decos.error,
     decos.warning,

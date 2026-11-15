@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { PackageManager } from '@core/types';
 
 let installTerminal: vscode.Terminal | undefined;
+let installCwd: string | undefined;
 
 /** Scripts and installs execute code from the project, so they need a trusted workspace. */
 function trusted(): boolean {
@@ -13,21 +14,27 @@ function trusted(): boolean {
   return false;
 }
 
-/** Runs `cmd` in a fresh terminal rooted at `cwd`. */
-export function runInTerminal(name: string, cwd: string, cmd: string): void {
+/**
+ * Runs `<pm> run <script>` as a task. The script name comes from package.json, so it is passed as one strongly quoted argument:
+ * VS Code quotes it for whichever shell the task uses, and nothing in the name can end the command or start another.
+ */
+export function runScript(pm: PackageManager, script: string, cwd: string): void {
   if (!trusted()) return;
-  const t = vscode.window.createTerminal({ name, cwd });
-  t.show(true);
-  t.sendText(cmd);
+  const exec = new vscode.ShellExecution(pm.name, ['run', { value: script, quoting: vscode.ShellQuoting.Strong }], { cwd });
+  const task = new vscode.Task({ type: 'shell' }, vscode.TaskScope.Workspace, `${script} · ${path.basename(cwd)}`, 'Pkg Guard', exec);
+  void vscode.tasks.executeTask(task);
 }
 
 export async function install(doc: vscode.TextDocument, pm: PackageManager): Promise<void> {
   if (!trusted()) return;
   await doc.save(); // the install must see the edited package.json
   const cwd = pm.root ?? path.dirname(doc.uri.fsPath);
-  if (!installTerminal || installTerminal.exitStatus) installTerminal = vscode.window.createTerminal({ name: 'Pkg Guard', cwd });
+  // The folder is the terminal's own working directory, never text typed into a shell, so its name cannot be interpreted.
+  if (!installTerminal || installTerminal.exitStatus || installCwd !== cwd) {
+    installTerminal = vscode.window.createTerminal({ name: 'Pkg Guard', cwd });
+    installCwd = cwd;
+  }
   installTerminal.show(true);
-  installTerminal.sendText(`cd "${cwd}"`);
   installTerminal.sendText(pm.installCmd);
 }
 

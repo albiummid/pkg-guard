@@ -7,7 +7,8 @@ export interface RangeUpdate {
 }
 
 export type FixEffect =
-  | { type: 'edit'; edits: TextEdit[] }
+  /** `file` is set when the edits belong to another manifest than the scanned one (a Pin goes to the workspace root) */
+  | { type: 'edit'; edits: TextEdit[]; file?: string }
   | { type: 'setting'; key: 'ignoredAdvisories' | 'ignoredPackages'; value: string }
   | { type: 'install' };
 
