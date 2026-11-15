@@ -60,7 +60,7 @@ Dependents are checked among your direct dependencies, using their installed `no
 
 - Advisories come from [OSV.dev](https://osv.dev) (when OSV.dev is unreachable it falls back to `yarn audit` / `npm audit`, which need the network too, a `yarn.lock` v1 or `package-lock.json`, and a trusted workspace; if that fails as well the output channel says the check failed). Versions come from the npm registry.
 - Fixes only edit `package.json`. Run your package manager afterwards to update the lockfile.
-- Not supported yet: yarn berry / pnpm lockfiles (direct dependencies are still checked using `node_modules` or the declared range), bun lockfiles, a dependency whose name and version are on different lines, workspaces `catalog:` ranges, and private registries that need authentication.
+- Not supported yet: yarn berry lockfiles (direct dependencies are still checked using `node_modules` or the declared range), bun lockfiles, a dependency whose name and version are on different lines, workspaces `catalog:` ranges, and private registries that need authentication.
 
 ## Building from source
 
