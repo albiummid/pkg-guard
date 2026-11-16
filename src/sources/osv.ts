@@ -73,20 +73,51 @@ export function severityOf(d: any): Severity {
   return 'unknown';
 }
 
-/** First "fixed" version of the affected range that contains `version`. */
-export function fixedFor(affected: any[] | undefined, name: string, version: string): string | undefined {
+/** Version an OSV range event stands for ("0" is below every version). */
+const eventVersion = (ev: any): string | undefined => ev.introduced ?? ev.fixed ?? ev.last_affected;
+
+/**
+ * Where `version` of `name` falls in the SEMVER / ECOSYSTEM ranges of an OSV `affected` list (the explicit `versions` lists are not
+ * looked at). `inRange` when a range covers it; `fixed` is the event that closes the interval it is in, when that is a "fixed"
+ * (none when the interval is open or closed by "last_affected").
+ */
+function rangeMatch(affected: any[] | undefined, name: string, version: string): { inRange: boolean; fixed?: string } {
+  let inRange = false;
   for (const a of affected ?? []) {
     if (a.package?.name !== name) continue;
     for (const r of a.ranges ?? []) {
       if (r.type !== 'SEMVER' && r.type !== 'ECOSYSTEM') continue;
-      let intro = '0';
-      for (const ev of r.events ?? []) {
-        if (ev.introduced !== undefined) intro = ev.introduced;
-        if (ev.fixed && compare(version, intro) >= 0 && compare(version, ev.fixed) < 0) return ev.fixed;
+      // the evaluation in the OSV schema: walk the events in version order, opening at "introduced", closing at "fixed" or after "last_affected"
+      const events = (r.events ?? []).filter((ev: any) => eventVersion(ev) !== undefined).sort((x: any, y: any) => compare(eventVersion(x)!, eventVersion(y)!));
+      let hit = false;
+      for (const ev of events) {
+        if (ev.introduced !== undefined) {
+          if (ev.introduced === '0' || compare(version, ev.introduced) >= 0) hit = true;
+        } else if (ev.fixed !== undefined) {
+          if (compare(version, ev.fixed) >= 0) hit = false;
+        } else if (compare(version, ev.last_affected) > 0) {
+          hit = false;
+        }
       }
+      if (!hit) continue;
+      inRange = true;
+      // the first closing event after the version's introducing one
+      const close = events.find((ev: any) => ev.introduced === undefined && (ev.fixed !== undefined ? compare(version, ev.fixed) < 0 : compare(version, ev.last_affected) <= 0));
+      if (close?.fixed !== undefined) return { inRange, fixed: close.fixed };
     }
   }
-  return undefined;
+  return { inRange };
+}
+
+/** The "fixed" version closing the affected range that contains `version`; undefined when that range has none (open, or "last_affected"). */
+export function fixedFor(affected: any[] | undefined, name: string, version: string): string | undefined {
+  return rangeMatch(affected, name, version).fixed;
+}
+
+/** True when an OSV `affected` list covers `version` of `name`, through its explicit versions or its SEMVER / ECOSYSTEM ranges. */
+export function isAffected(affected: any[] | undefined, name: string, version: string): boolean {
+  if ((affected ?? []).some((a) => a.package?.name === name && Array.isArray(a.versions) && a.versions.includes(version))) return true;
+  return rangeMatch(affected, name, version).inRange;
 }
 
 export function toVuln(d: any, pkg: string, version: string): Vuln {
@@ -123,12 +154,19 @@ async function post(url: string, body: unknown): Promise<any> {
   return res.json();
 }
 
-type Pkg = { name: string; version: string };
+/**
+ * `allowed` is set when nothing is installed: the package is then asked for with no version, which returns every Advisory it has,
+ * and each Advisory is matched here against these published versions the Declared range allows.
+ */
+export type Pkg = { name: string; version: string; allowed?: string[] };
+/** Key of the result: the version checked (the Floor version when `allowed` is set). */
 const keyOf = (p: Pkg) => `${p.name}@${p.version}`;
+/** Key of the OSV query and its cached ids; the query with no version is shared by every range of the package. */
+const queryOf = (p: Pkg) => (p.allowed ? `${p.name}@` : keyOf(p));
 
 /** Asks OSV for the advisory ids of one chunk of packages, following result pages. Throws when OSV fails. */
 async function fetchIds(chunk: Pkg[]): Promise<void> {
-  const query = (p: Pkg, page_token?: string) => ({ package: { name: p.name, ecosystem: 'npm' }, version: p.version, ...(page_token ? { page_token } : {}) });
+  const query = (p: Pkg, page_token?: string) => ({ package: { name: p.name, ecosystem: 'npm' }, ...(p.allowed ? {} : { version: p.version }), ...(page_token ? { page_token } : {}) });
   const res = await post(`${OSV}/querybatch`, { queries: chunk.map((p) => query(p)) });
   for (let k = 0; k < chunk.length; k++) {
     const ids: string[] = (res.results?.[k]?.vulns ?? []).map((v: any) => v.id as string);
@@ -138,7 +176,7 @@ async function fetchIds(chunk: Pkg[]): Promise<void> {
       ids.push(...(next.results?.[0]?.vulns ?? []).map((v: any) => v.id as string));
       token = next.results?.[0]?.next_page_token;
     }
-    idCache.set(keyOf(chunk[k]), { t: Date.now(), ids });
+    idCache.set(queryOf(chunk[k]), { t: Date.now(), ids });
   }
 }
 
@@ -159,42 +197,71 @@ function fetchDetail(id: string): Promise<void> {
   return p;
 }
 
-/** Throws when OSV is unreachable so the caller can fall back to an audit CLI. Keys are "name@version". */
+/**
+ * The Vulnerability of Advisory `d` across the allowed versions it affects, or undefined when it affects none. Its fixed version
+ * clears all of them: the highest fix of the ranges they fall in, known only when every such range has one and it is above each
+ * affected version. A version named only in the explicit `versions` list has no fix of its own, so it does not erase one.
+ * Without details (`d` is only `{ id }`) the affected versions cannot be named: the Advisory is reported anyway, with an empty
+ * `affectedAllowed`, no fixed version, and the severity its id alone gives (unknown, or critical for malware).
+ */
+function allowedVuln(d: any, p: Pkg): Vuln | undefined {
+  if (!d.affected) return { ...toVuln(d, p.name, p.version), fixedIn: undefined, affectedAllowed: [] };
+  const hit = (p.allowed ?? []).filter((v) => isAffected(d.affected, p.name, v)).sort(compare);
+  if (!hit.length) return undefined;
+  let fixedIn: string | undefined;
+  let open = false;
+  for (const v of hit) {
+    const m = rangeMatch(d.affected, p.name, v);
+    if (!m.inRange) continue;
+    if (!m.fixed) open = true;
+    else if (!fixedIn || compare(m.fixed, fixedIn) > 0) fixedIn = m.fixed;
+  }
+  if (open || (fixedIn && compare(fixedIn, hit[hit.length - 1]) <= 0)) fixedIn = undefined;
+  return { ...toVuln(d, p.name, p.version), fixedIn, affectedAllowed: hit };
+}
+
+/**
+ * Throws when OSV is unreachable so the caller can fall back to an audit CLI. Keys are "name@version". A package with `allowed`
+ * costs the same one query as any other, plus the details of each of its Advisories (cached). An Advisory whose details could
+ * not be fetched is still reported, by its id alone; the failure is not cached, so a later scan fetches them again.
+ */
 export async function osvQuery(pkgs: Pkg[]): Promise<Map<string, Vuln[]>> {
   const unique = [...new Map(pkgs.filter((p) => p.version).map((p) => [keyOf(p), p])).values()];
+  const queries = [...new Map(unique.map((p) => [queryOf(p), p])).values()];
   const now = Date.now();
-  const stale = unique.filter((p) => {
-    const c = idCache.get(keyOf(p));
+  const stale = queries.filter((p) => {
+    const c = idCache.get(queryOf(p));
     return !c || now - c.t > TTL;
   });
   const waits: Promise<void>[] = [];
   const toFetch: Pkg[] = [];
   for (const p of stale) {
-    const running = idInflight.get(keyOf(p));
+    const running = idInflight.get(queryOf(p));
     if (running) waits.push(running);
     else toFetch.push(p);
   }
   for (let i = 0; i < toFetch.length; i += 1000) {
     const chunk = toFetch.slice(i, i + 1000);
     const p = fetchIds(chunk);
-    for (const c of chunk) idInflight.set(keyOf(c), p);
-    const done = () => chunk.forEach((c) => idInflight.delete(keyOf(c)));
+    for (const c of chunk) idInflight.set(queryOf(c), p);
+    const done = () => chunk.forEach((c) => idInflight.delete(queryOf(c)));
     void p.then(done, done);
     waits.push(p);
   }
   await Promise.all(waits);
 
   const ids = new Set<string>();
-  for (const p of unique) idCache.get(keyOf(p))?.ids.forEach((x) => ids.add(x));
+  for (const p of queries) idCache.get(queryOf(p))?.ids.forEach((x) => ids.add(x));
   await pool([...ids].filter((x) => !detailCache.has(x)), 8, fetchDetail);
 
   const out = new Map<string, Vuln[]>();
   for (const p of unique) {
     const list: Vuln[] = [];
-    for (const id of idCache.get(keyOf(p))?.ids ?? []) {
+    for (const id of idCache.get(queryOf(p))?.ids ?? []) {
       const d = detailCache.get(id) ?? { id };
       if (d.withdrawn) continue;
-      list.push(toVuln(d, p.name, p.version));
+      const v = p.allowed ? allowedVuln(d, p) : toVuln(d, p.name, p.version);
+      if (v) list.push(v);
     }
     if (list.length) out.set(keyOf(p), list);
   }
