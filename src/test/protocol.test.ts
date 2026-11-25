@@ -12,7 +12,7 @@ const modelFile = path.join(root, 'platforms/jetbrains/src/main/kotlin/dev/pkggu
 /** Kotlin class -> TypeScript type, where the names differ. */
 const TS_NAME: Record<string, string> = { Entry: 'DepEntry', Pm: 'PackageManager', CompanionUpdate: 'Companion', Bump: 'BumpTargets', RepoUrl: 'RepoUrlResponse' };
 /** TypeScript fields the plugin deliberately does not read. */
-const UNREAD: Record<string, string[]> = { UpgradeReportResponse: ['report'] };
+const UNREAD: Record<string, string[]> = { UpgradeReportResponse: ['report'], Issue: ['peer', 'dependent', 'alreadyTheCase'] };
 
 interface Field { optional: boolean; type: string }
 type Shape = Record<string, Field>;
