@@ -2,14 +2,15 @@
 // The verdict logic (judgeOverride) is pure; auditOverrides does the lockfile read, registry lookups and one OSV query.
 import * as fs from 'fs';
 import * as path from 'path';
+import { reportable } from './findings';
 import { findLock } from './scan';
-import { LockRequest, lockRequests, npmLockRequests } from '../sources/lockfile';
+import { isBerryLock, LockRequest, lockRequests, npmLockRequests } from '../sources/lockfile';
 import { osvQuery } from '../sources/osv';
 import { fetchInfo } from '../sources/registry';
 import { isRange, satisfies } from '../versions/satisfies';
 import { compare, isStable, parse } from '../versions/semver';
-import { PackageManager, ScanResult, SEVERITY_RANK, Settings, Vuln } from '../types';
-import { OverrideAudit, OverrideRequest, OverrideRow } from '../types/overrides';
+import { PackageManager, ScanResult, Settings, Vuln } from '../types';
+import { OverrideAudit, OverrideRequest, OverrideRow, RangeRequest } from '../types/overrides';
 
 /** One key of the override section, parsed. */
 export interface OverrideKey {
@@ -65,7 +66,7 @@ export function overrideKeys(manifest: any, pm: PackageManager): OverrideKey[] {
 }
 
 /** The ranges in the lockfile the key applies to, each with the packages requesting it. */
-export function requestsFor(k: OverrideKey, reqs: LockRequest[]): { range: string; by: string[] }[] {
+export function requestsFor(k: OverrideKey, reqs: LockRequest[]): RangeRequest[] {
   const out = new Map<string, string[]>();
   for (const q of reqs) {
     if (q.name !== k.name || (k.parent !== undefined && q.by !== k.parent) || (k.keyRange !== undefined && q.range !== k.keyRange)) continue;
@@ -84,17 +85,22 @@ export function freshVersion(range: string, versions: string[]): string | undefi
   return pool.length ? pool.reduce((a, b) => (compare(b, a) > 0 ? b : a)) : undefined;
 }
 
-/** Major line of a version: the major, or `0.minor` below 1.0.0 where a minor is breaking. */
-function line(v: string): string {
-  const p = parse(v);
-  return !p ? v : p.major === 0 ? `0.${p.minor}` : String(p.major);
+/**
+ * Whether `range` shares no published version with the override's `value`: some version satisfying both means they intersect.
+ * Undefined (not checked) when either side is not a range or matches no published version, so there is no data to judge the pair by.
+ */
+function outsideRange(value: string, range: string, versions: string[]): boolean | undefined {
+  if (!isRange(value) || !isRange(range)) return undefined;
+  const allowed = versions.filter((v) => satisfies(v, range));
+  if (!allowed.length || !versions.some((v) => satisfies(v, value))) return undefined;
+  return !allowed.some((v) => satisfies(v, value));
 }
 
 export interface JudgeInput {
   key: string;
   name: string;
   value: string;
-  requests: { range: string; by: string[] }[];
+  requests: RangeRequest[];
   /** published versions of the package; undefined when the registry lookup failed */
   versions?: string[];
   /** Advisory ids by version (a missing version has none); undefined when the advisory lookup failed */
@@ -104,8 +110,15 @@ export interface JudgeInput {
 
 /**
  * Verdict of one override key. A request at the override's own range is the key itself (or asks for exactly what it forces), so it is left out.
- * forces-other-major wins when a requester that would be clean on its own is moved to another major; otherwise any requester that would get
- * a version with an Advisory makes it still needed (forcing a major is then the price of the fix); otherwise it is redundant.
+ *
+ * Precedence (decided in #35):
+ * 1. forces-other-major: the override's range shares no published version with some requester's range, and that requester would get a
+ *    version with no Advisory without the override (it is moved off its range for nothing);
+ * 2. still-needed: otherwise, any requester would get a version with an Advisory without it. This wins even when that requester's own
+ *    range does not intersect the override's: leaving its range is then the price of the fix;
+ * 3. redundant: otherwise.
+ *
+ * A pair whose intersection cannot be checked (no published version data for one side) is never counted as forcing.
  */
 export function judgeOverride(i: JudgeInput): OverrideRow {
   const row = (r: Partial<OverrideRow>): OverrideRow => ({ key: i.key, name: i.name, value: i.value, verdict: 'not-checked', requests: [], ...r });
@@ -117,13 +130,12 @@ export function judgeOverride(i: JudgeInput): OverrideRow {
   if (!forced) return row({ reason: `no published version matches ${i.value}` });
   const requests: OverrideRequest[] = others.map((q) => {
     const fresh = freshVersion(q.range, i.versions!);
-    const allowed = isRange(q.range) ? i.versions!.filter((v) => satisfies(v, q.range)) : [];
-    return { range: q.range, by: q.by, fresh, advisories: (fresh && i.advisories?.get(fresh)) || [], otherMajor: allowed.length > 0 && !allowed.some((v) => line(v) === line(forced)) };
+    return { range: q.range, by: q.by, fresh, advisories: (fresh && i.advisories?.get(fresh)) || [], outsideRange: outsideRange(i.value, q.range, i.versions!) };
   });
   if (!i.advisories) return row({ forced, requests, reason: 'advisory lookup failed' });
   if (!requests.length) return row({ verdict: 'redundant', forced, requests });
   if (!requests.some((q) => q.fresh)) return row({ forced, requests, reason: 'the requested ranges match no published version' });
-  const verdict = requests.some((q) => q.otherMajor && !q.advisories.length) ? 'forces-other-major' : requests.some((q) => q.advisories.length) ? 'still-needed' : 'redundant';
+  const verdict = requests.some((q) => q.outsideRange === true && !q.advisories.length) ? 'forces-other-major' : requests.some((q) => q.advisories.length) ? 'still-needed' : 'redundant';
   return row({ verdict, forced, requests });
 }
 
@@ -150,12 +162,12 @@ export async function auditOverrides(text: string, pkgFile: string, r: ScanResul
   let lockfile: OverrideAudit['lockfile'];
   try {
     const lockText = await fs.promises.readFile(lock.file, 'utf8');
-    lockfile = lock.kind === 'yarn' ? (/^__metadata:/m.test(lockText) ? 'yarn-berry' : 'yarn-classic') : 'npm';
+    lockfile = lock.kind === 'yarn' ? (isBerryLock(lockText) ? 'yarn-berry' : 'yarn-classic') : 'npm';
     reqs = lock.kind === 'yarn' ? lockRequests(lockText) : npmLockRequests(JSON.parse(lockText));
   } catch {
     return skipAll('none', `${path.basename(lock.file)} could not be read`);
   }
-  if (!reqs) return skipAll(lockfile, `${path.basename(lock.file)} could not be read`);
+  if (!reqs) return skipAll(lockfile, lockfile === 'npm' ? `${path.basename(lock.file)} v1 (no "packages" section) is not checked` : `${path.basename(lock.file)} could not be read`);
 
   const inputs = keys.map((k): JudgeInput => ({ ...k, requests: k.notChecked ? [] : requestsFor(k, reqs!) }));
   const names = [...new Set(inputs.filter((x) => !x.notChecked && x.requests.length).map((x) => x.name))];
@@ -174,14 +186,13 @@ export async function auditOverrides(text: string, pkgFile: string, r: ScanResul
   } catch {
     found = undefined;
   }
-  const minRank = SEVERITY_RANK[s.minSeverity];
-  const ignored = new Set(s.ignoredAdvisories);
+  const reported = reportable(s);
   for (const x of inputs) {
     if (!found) continue;
     const byVersion = new Map<string, string[]>();
     for (const [key, vulns] of found) {
       if (!key.startsWith(`${x.name}@`)) continue;
-      const ids = vulns.filter((v) => (v.severity === 'unknown' || SEVERITY_RANK[v.severity] >= minRank) && !ignored.has(v.id) && !v.aliases?.some((a) => ignored.has(a))).map((v) => v.id);
+      const ids = vulns.filter(reported).map((v) => v.id);
       if (ids.length) byVersion.set(key.slice(x.name.length + 1), ids);
     }
     x.advisories = byVersion;

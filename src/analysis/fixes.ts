@@ -77,7 +77,6 @@ export function pinsEffect(text: string, pins: PinRequest[], pkgFile?: string): 
   return file ? { type: 'edit', edits, file } : { type: 'edit', edits };
 }
 
-/** What else changes if `name` goes from its installed version to `target`. */
 /** Without node_modules: the installed version's manifest from the scan's registry data (lockfile version). */
 function scannedManifest(c: CompatContext, name: string) {
   const v = c.installed?.get(name);
@@ -85,6 +84,7 @@ function scannedManifest(c: CompatContext, name: string) {
   return m && { ...m, version: v };
 }
 
+/** What else changes if `name` goes from its installed version to `target`. */
 export async function compatFor(c: CompatContext): Promise<CompatReport> {
   const dir = path.dirname(c.pkgFile);
   const installed = c.installed?.get(c.name);

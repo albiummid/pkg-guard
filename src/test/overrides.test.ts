@@ -1,9 +1,12 @@
 // Override audit (#35): which `resolutions` / `overrides` entries are still needed, redundant, forcing another major, or unused.
 import * as assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { judgeOverride, overrideKeys, requestsFor } from '../analysis/overrides';
-import { LockRequest } from '../sources/lockfile';
-import { PackageManager } from '../types';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { auditOverrides, judgeOverride, overrideKeys, requestsFor } from '../analysis/overrides';
+import { LockRequest, npmLockRequests } from '../sources/lockfile';
+import { PackageManager, ScanResult, Settings } from '../types';
 
 const yarn: PackageManager = { name: 'yarn', installCmd: 'yarn install', overrideSection: 'resolutions' };
 const npm: PackageManager = { name: 'npm', installCmd: 'npm install', overrideSection: 'overrides' };
@@ -27,7 +30,7 @@ test('a js-yaml ^5 override over requests for ^3.13.1 and ^4.1.0 forces another 
   assert.equal(row.verdict, 'forces-other-major');
   assert.equal(row.forced, '5.5.0');
   assert.deepEqual(
-    row.requests.map((q) => [q.range, q.fresh, q.otherMajor]),
+    row.requests.map((q) => [q.range, q.fresh, q.outsideRange]),
     [
       ['^3.13.1', '3.15.2', true],
       ['^4.1.0', '4.3.2', true],
@@ -61,7 +64,7 @@ test('still needed when a requester would get a version with an Advisory, even a
     advisories: new Map([['8.3.2', ['GHSA-uuid']]]),
   });
   assert.equal(row.verdict, 'still-needed');
-  assert.deepEqual(row.requests[0], { range: '^8.3.0', by: ['exceljs'], fresh: '8.3.2', advisories: ['GHSA-uuid'], otherMajor: true });
+  assert.deepEqual(row.requests[0], { range: '^8.3.0', by: ['exceljs'], fresh: '8.3.2', advisories: ['GHSA-uuid'], outsideRange: true });
 });
 
 test('redundant when every requester would get a clean version on its own', () => {
@@ -125,4 +128,61 @@ test('a scoped key only audits what its parent requests', () => {
     { range: '^3.1.2', by: ['glob'] },
     { range: '^9.0.4', by: ['parent', 'other'] },
   ]);
+});
+
+const V4 = ['3.0.0', '3.5.0', '4.0.0', '4.0.3', '4.1.1', '4.2.0', '5.0.0'];
+
+test('forces-other-major means the ranges share no published version, even within one major', () => {
+  const judge = (value: string, range: string) => judgeOverride({ key: 'p', name: 'p', value, requests: [{ range, by: ['a'] }], versions: V4, advisories: new Map() });
+  const narrow = judge('^4.1.1', '~4.0.0');
+  assert.equal(narrow.verdict, 'forces-other-major');
+  assert.equal(narrow.requests[0].outsideRange, true);
+  const wide = judge('>=3', '^3');
+  assert.equal(wide.verdict, 'redundant');
+  assert.equal(wide.requests[0].outsideRange, false);
+});
+
+test('a request whose range has no published version data is not checked for intersection, not guessed', () => {
+  const row = judgeOverride({
+    key: 'p',
+    name: 'p',
+    value: '^4.1.1',
+    requests: [
+      { range: 'github:owner/p', by: ['a'] },
+      { range: '^9.0.0', by: ['b'] },
+      { range: '^4.0.0', by: ['c'] },
+    ],
+    versions: V4,
+    advisories: new Map(),
+  });
+  assert.deepEqual(
+    row.requests.map((q) => [q.range, q.outsideRange]),
+    [
+      ['github:owner/p', undefined],
+      ['^9.0.0', undefined],
+      ['^4.0.0', false],
+    ],
+  );
+  assert.equal(row.verdict, 'redundant');
+});
+
+test('an npm v1 lockfile (no "packages") leaves every override not checked, not unused', async () => {
+  assert.equal(npmLockRequests({ lockfileVersion: 1, dependencies: { a: { version: '1.0.0' } } }), null);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pg-v1-'));
+  try {
+    const pkgFile = path.join(dir, 'package.json');
+    const text = JSON.stringify({ name: 'x', dependencies: { a: '^1.0.0' }, overrides: { a: '1.0.1', b: '^2.0.0' } });
+    fs.writeFileSync(pkgFile, text);
+    fs.writeFileSync(path.join(dir, 'package-lock.json'), JSON.stringify({ lockfileVersion: 1, dependencies: { a: { version: '1.0.0' } } }));
+    const s = { minSeverity: 'low', ignoredAdvisories: [], registry: 'https://registry.npmjs.org' } as unknown as Settings;
+    const audit = await auditOverrides(text, pkgFile, { pm: npm } as ScanResult, s);
+    assert.equal(audit?.lockfile, 'npm');
+    assert.deepEqual(
+      audit?.rows.map((r) => r.verdict),
+      ['not-checked', 'not-checked'],
+    );
+    assert.match(audit?.rows[0].reason ?? '', /v1/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -421,8 +421,8 @@ test('overrides: every verdict is rendered from the precomputed audit, after the
     section: 'resolutions',
     lockfile: 'yarn-classic',
     rows: [
-      { key: 'uuid', name: 'uuid', value: '^11.1.1', verdict: 'still-needed', forced: '11.1.1', requests: [{ range: '^8.3.0', by: ['exceljs'], fresh: '8.3.2', advisories: ['GHSA-uuid'], otherMajor: true }] },
-      { key: 'body-parser', name: 'body-parser', value: '^2.4.0', verdict: 'redundant', forced: '2.4.0', requests: [{ range: '^2.2.1', by: ['express'], fresh: '2.4.0', advisories: [], otherMajor: false }] },
+      { key: 'uuid', name: 'uuid', value: '^11.1.1', verdict: 'still-needed', forced: '11.1.1', requests: [{ range: '^8.3.0', by: ['exceljs'], fresh: '8.3.2', advisories: ['GHSA-uuid'], outsideRange: true }] },
+      { key: 'body-parser', name: 'body-parser', value: '^2.4.0', verdict: 'redundant', forced: '2.4.0', requests: [{ range: '^2.2.1', by: ['express'], fresh: '2.4.0', advisories: [], outsideRange: false }] },
       {
         key: 'js-yaml',
         name: 'js-yaml',
@@ -430,8 +430,8 @@ test('overrides: every verdict is rendered from the precomputed audit, after the
         verdict: 'forces-other-major',
         forced: '5.5.0',
         requests: [
-          { range: '^3.13.1', by: ['@istanbuljs/load-nyc-config'], fresh: '3.15.2', advisories: [], otherMajor: true },
-          { range: '5.3.0', by: ['@nestjs/swagger'], fresh: '5.3.0', advisories: ['GHSA-yaml'], otherMajor: false },
+          { range: '^3.13.1', by: ['@istanbuljs/load-nyc-config'], fresh: '3.15.2', advisories: [], outsideRange: true },
+          { range: '5.3.0', by: ['@nestjs/swagger'], fresh: '5.3.0', advisories: ['GHSA-yaml'], outsideRange: false },
         ],
       },
       { key: '**/parent/gone', name: 'gone', value: '1.0.0', verdict: 'unused', requests: [] },
@@ -460,4 +460,81 @@ test('overrides: no section without entries, and no yarn v1 reminder for other l
   );
   assert.match(md, /`pnpm\.overrides`/);
   assert.doesNotMatch(md, /yarn v1/);
+});
+
+test('a direct Vulnerability also pulled in by another dependency shows "direct" and that dependency', () => {
+  const scan = scanOf(
+    [
+      { name: 'a', installed: '1.0.0', versions: ['1.0.0', '1.0.5'] },
+      { name: 'b', installed: '2.0.0', versions: ['2.0.0'] },
+    ],
+    'npm',
+    { hits: [hit(['a'], 'a', '1.0.0', 'GHSA-a', '1.0.5'), hit(['b', 'a'], 'a', '1.0.0', 'GHSA-a', '1.0.5')] },
+  );
+  assert.match(formatUpgradeReport(reportOf(scan)), /\| a@1\.0\.0 \| moderate \| GHSA-a \| direct, b \|/);
+});
+
+test('an upgrade does not claim a Transitive vulnerability its root also reaches through a deeper path', () => {
+  const scan = scanOf([{ name: 'p', installed: '1.0.0', versions: ['1.0.0', '1.1.0'], manifests: { '1.1.0': { dependencies: { child: '^2.1.0' } } } }], 'npm', {
+    hits: [hit(['p', 'child'], 'child', '2.0.0', 'GHSA-child', '2.0.5'), hit(['p', 'mid', 'child'], 'child', '2.0.0', 'GHSA-child', '2.0.5')],
+  });
+  const r = reportOf(scan);
+  assert.deepEqual(rowOf(r, 'p', 'minor')?.fixes, []);
+  assert.equal(rowOf(r, 'p', 'minor')?.fixesVuln, false);
+});
+
+test('a Vulnerability with an Advisory that has no fixed version is not claimed as fixed by any upgrade', () => {
+  const transitive = transitiveScan();
+  transitive.hits.push(hit(['rimraf', 'glob'], 'glob', '10.4.0', 'GHSA-glob-nofix'));
+  const r = reportOf(transitive);
+  const glob = vulnOf(r, 'glob@10.4.0')!;
+  assert.equal(glob.fixedIn, undefined);
+  assert.deepEqual(glob.fixes, []);
+  assert.match(glob.noFix!, /no fixed version known for GHSA-glob-nofix/);
+  assert.equal(glob.hint, undefined);
+  assert.deepEqual(rowOf(r, 'rimraf', 'minor')?.fixes, []);
+  assert.match(formatUpgradeReport(r), /\| glob@10\.4\.0 \| high \| GHSA-glob-1, GHSA-glob-2, GHSA-glob-nofix \| jest, rimraf \| – \| none: no fixed version known for GHSA-glob-nofix \|/);
+
+  const direct = scanOf([{ name: 'a', installed: '1.0.0', versions: ['1.0.0', '1.0.5'] }], 'npm', { hits: [hit(['a'], 'a', '1.0.0', 'GHSA-a', '1.0.5'), hit(['a'], 'a', '1.0.0', 'GHSA-a-nofix')] });
+  const d = reportOf(direct);
+  assert.deepEqual(rowOf(d, 'a', 'patch')?.fixes, []);
+  assert.equal(rowOf(d, 'a', 'patch')?.fixesVuln, false);
+  assert.deepEqual(vulnOf(d, 'a@1.0.0')!.fixes, []);
+  assert.match(vulnOf(d, 'a@1.0.0')!.noFix!, /no fixed version known for GHSA-a-nofix/);
+});
+
+test('"upgrade together" names the partner row that survives the fold', () => {
+  const scan = scanOf([
+    { name: 'plugin', installed: '8.68.0', versions: ['8.68.0', '8.74.0'] },
+    { name: 'parser', installed: '8.68.0', versions: ['8.68.0', '8.68.1', '8.74.0'] },
+  ]);
+  const compat: CompatMap = new Map([
+    [compatKey('plugin', '8.74.0'), { issues: [{ level: 'error', text: 'needs peer parser ^8.68.1', peer: { name: 'parser', range: '^8.68.1' } }], companions: [] }],
+    [compatKey('parser', '8.68.1'), { issues: [], companions: [] }],
+    [compatKey('parser', '8.74.0'), { issues: [], companions: [] }],
+  ]);
+  const r = buildUpgradeReport(scan, [], settings, 'p', compat);
+  assert.equal(rowOf(r, 'parser', 'patch'), undefined);
+  assert.deepEqual(rowOf(r, 'plugin', 'minor')?.notes, ['upgrade together with parser@8.74.0']);
+  assert.equal(rowOf(r, 'plugin', 'minor')?.bucket, 'safe');
+});
+
+test('"upgrade together" compares resolved buckets: a partner that resolves to safe keeps the row safe', () => {
+  const scan = scanOf([
+    { name: 'plugin', installed: '1.0.0', versions: ['1.0.0', '1.1.0'] },
+    { name: 'parser', installed: '1.0.0', versions: ['1.0.0', '1.0.1', '1.1.0'] },
+    { name: 'z', installed: '2.0.0', versions: ['2.0.0', '2.1.0'] },
+  ]);
+  const compat: CompatMap = new Map([
+    [compatKey('plugin', '1.1.0'), { issues: [{ level: 'error', text: 'needs peer parser ^1.0.1', peer: { name: 'parser', range: '^1.0.1' } }], companions: [] }],
+    // the patch stays in caution; the minor needs z, which another row upgrades, so it resolves to safe
+    [compatKey('parser', '1.0.1'), { issues: [{ level: 'warning', text: 'requires Node >=99' }], companions: [] }],
+    [compatKey('parser', '1.1.0'), { issues: [{ level: 'error', text: 'needs peer z ^2.1.0', peer: { name: 'z', range: '^2.1.0' } }], companions: [] }],
+    [compatKey('z', '2.1.0'), { issues: [], companions: [] }],
+  ]);
+  const r = buildUpgradeReport(scan, [], settings, 'p', compat);
+  assert.equal(rowOf(r, 'parser', 'minor')?.bucket, 'safe');
+  assert.equal(rowOf(r, 'parser', 'patch')?.bucket, 'caution');
+  assert.equal(rowOf(r, 'plugin', 'minor')?.bucket, 'safe');
+  assert.deepEqual(rowOf(r, 'plugin', 'minor')?.notes, ['upgrade together with parser@1.1.0']);
 });

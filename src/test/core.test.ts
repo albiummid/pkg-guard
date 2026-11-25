@@ -139,7 +139,7 @@ test('npm lockfile: the ranges each package and the project request', () => {
       'node_modules/c/node_modules/b': { version: '2.0.0' },
     },
   };
-  const reqs = npmLockRequests(lock);
+  const reqs = npmLockRequests(lock)!;
   assert.deepEqual(reqs.filter((q) => q.name === 'b').map((q) => `${q.range} by ${q.by}`).sort(), ['^1 by a', '^2.0.0 by c']);
   assert.deepEqual(reqs.filter((q) => q.name === 'c'), [{ name: 'c', range: '~3.1.0', by: '' }]);
 });

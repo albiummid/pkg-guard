@@ -20,63 +20,86 @@ function bucketOf(installed: string, kind: BumpKind, compat?: CompatReport): Buc
 
 const RANK: Record<Bucket, number> = { safe: 0, caution: 1, major: 2 };
 
-/**
- * Another row, in the same or a safer bucket, that resolves `issue` of row `x`: its target meets the peer `x` needs,
- * or it is the dependent whose peer range rejects `x`'s target and its new version accepts that target.
- */
-function partnerOf(x: ReportRow, issue: Issue, rows: ReportRow[], r: ScanResult, c: CompatReport): ReportRow | undefined {
-  const fits = (y: ReportRow): boolean => {
-    if (y.name === x.name || RANK[y.bucket] > RANK[x.bucket]) return false;
-    if (issue.peer) return y.name === issue.peer.name && satisfies(y.target, issue.peer.range);
-    if (issue.dependent?.name !== y.name) return false;
-    const m = r.info.get(y.name)?.manifests[y.target];
-    if (!m) return c.companions.some((k) => k.name === y.name && k.to === y.target);
-    const range = m.peerDependencies?.[x.name];
-    return range === undefined || (isRange(range) && satisfies(x.target, range));
-  };
-  return rows.filter(fits).sort((a, b) => RANK[a.bucket] - RANK[b.bucket] || compare(a.target, b.target))[0];
+/** A peer or dependent Compatibility issue of a row, with every other row whose upgrade resolves it (any bucket). */
+interface Need {
+  issue: Issue;
+  partners: ReportRow[];
 }
 
 /**
- * Judges each row's Compatibility issues against the whole report: an issue another row's upgrade resolves becomes
- * "upgrade together with name@target" (majors just drop it) and no longer counts toward caution; a pair lands in the
- * bucket of its riskier member. Major rows keep their bucket and list what blocks them; already-the-case info is shown on the others.
+ * Whether row `y` resolves `issue` of row `x`: its target meets the peer `x` needs, or it is the dependent whose peer range
+ * rejects `x`'s target and its new version accepts that target.
  */
-function upgradeTogether(rows: ReportRow[], compatOf: Map<ReportRow, CompatReport>, r: ScanResult) {
-  const partners = new Map<ReportRow, ReportRow[]>();
-  const decided = new Map<ReportRow, { bucket: Bucket; notes: string[] }>();
+function resolves(x: ReportRow, issue: Issue, y: ReportRow, r: ScanResult, c: CompatReport): boolean {
+  if (y.name === x.name) return false;
+  if (issue.peer) return y.name === issue.peer.name && satisfies(y.target, issue.peer.range);
+  if (issue.dependent?.name !== y.name) return false;
+  const m = r.info.get(y.name)?.manifests[y.target];
+  if (!m) return c.companions.some((k) => k.name === y.name && k.to === y.target);
+  const range = m.peerDependencies?.[x.name];
+  return range === undefined || (isRange(range) && satisfies(x.target, range));
+}
+
+function needsOf(rows: ReportRow[], compatOf: Map<ReportRow, CompatReport>, r: ScanResult): Map<ReportRow, Need[]> {
+  const out = new Map<ReportRow, Need[]>();
+  for (const [x, c] of compatOf) {
+    out.set(
+      x,
+      c.issues.filter((i) => i.level !== 'info' && (i.peer || i.dependent)).map((issue) => ({ issue, partners: rows.filter((y) => resolves(x, issue, y, r, c)) })),
+    );
+  }
+  return out;
+}
+
+/** The partner `x` is upgraded together with: one in the same or a safer (resolved) bucket, safest first, then the lowest target. A major takes any. */
+const partnerOf = (x: ReportRow, partners: ReportRow[]): ReportRow | undefined =>
+  partners.filter((y) => x.kind === 'major' || RANK[y.bucket] <= RANK[x.bucket]).sort((a, b) => RANK[a.bucket] - RANK[b.bucket] || compare(a.target, b.target))[0];
+
+/**
+ * Settles the buckets of the Compatibility-checked rows against the whole report. A non-major row starts safe unless it has a note
+ * (0.x minor, `@types/node`) or an issue no other row can resolve; it then moves to caution while any of its issues has no partner in
+ * the same or a safer resolved bucket. Buckets only rise, so this ends; a pair lands in the bucket of its riskier member.
+ */
+function settleBuckets(compatOf: Map<ReportRow, CompatReport>, needs: Map<ReportRow, Need[]>) {
+  for (const [x, c] of compatOf) {
+    if (x.kind === 'major') continue;
+    const blocked = x.notes.length > 0 || c.issues.some((i) => i.level !== 'info' && !i.peer && !i.dependent);
+    x.bucket = blocked ? 'caution' : 'safe';
+  }
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const [x, list] of needs) {
+      if (x.kind === 'major' || x.bucket === 'caution') continue;
+      if (list.some((n) => !partnerOf(x, n.partners))) {
+        x.bucket = 'caution';
+        changed = true;
+      }
+    }
+  }
+}
+
+/**
+ * Notes of the Compatibility-checked rows, once the fold is done: an issue a shown row resolves reads "upgrade together with name@target"
+ * (majors just drop it); the others are listed. Already-the-case info is shown on non-major rows.
+ */
+function compatNotes(compatOf: Map<ReportRow, CompatReport>, needs: Map<ReportRow, Need[]>, shown: Set<ReportRow>) {
   for (const [x, c] of compatOf) {
     const notes = [...x.notes];
-    let blocked = notes.length > 0; // the 0.x minor note
     const with_: ReportRow[] = [];
     for (const issue of c.issues) {
       if (issue.level === 'info') {
         if (issue.alreadyTheCase && x.kind !== 'major') notes.push(issue.text);
         continue;
       }
-      const p = issue.peer || issue.dependent ? partnerOf(x, issue, rows, r, c) : undefined;
-      if (!p) {
-        blocked = true;
-        notes.push(issue.text);
-      } else if (!with_.includes(p)) {
+      const n = needs.get(x)?.find((k) => k.issue === issue);
+      const p = n && partnerOf(x, n.partners.filter((y) => shown.has(y)));
+      if (!p) notes.push(issue.text);
+      else if (!with_.includes(p)) {
         with_.push(p);
         if (x.kind !== 'major') notes.push(`upgrade together with ${p.name}@${p.target}`);
       }
     }
-    partners.set(x, with_);
-    decided.set(x, { bucket: x.kind === 'major' ? 'major' : blocked ? 'caution' : 'safe', notes });
-  }
-  for (const [x, d] of decided) Object.assign(x, d);
-  for (let changed = true; changed; ) {
-    changed = false;
-    for (const [x, with_] of partners) {
-      for (const p of with_) {
-        if (RANK[p.bucket] > RANK[x.bucket]) {
-          x.bucket = p.bucket;
-          changed = true;
-        }
-      }
-    }
+    x.notes = notes;
   }
 }
 
@@ -107,14 +130,15 @@ function checkNodeTypes(row: ReportRow, projectNode: string | undefined): void {
 
 /**
  * One row per package per bucket: the minor row already includes the patch, so the patch row only stays when it lands in a
- * different bucket, or when it fixes a Vulnerability the minor row is not known to fix (the minor's own range may not reach the fix).
+ * different bucket, when it fixes a Vulnerability the minor row is not known to fix (the minor's own range may not reach the fix),
+ * or when it resolves another row's Compatibility issue the minor row does not.
  */
-const dedupe = (rows: ReportRow[]) =>
-  rows.filter(
-    (x) =>
-      x.kind !== 'patch' ||
-      !rows.some((y) => y.name === x.name && y.kind === 'minor' && y.bucket === x.bucket && (!x.fixesVuln || y.fixesVuln) && x.fixes.every((k) => y.fixes.includes(k))),
-  );
+function dedupe(rows: ReportRow[], needs: Map<ReportRow, Need[]>): ReportRow[] {
+  const partnerLists = [...needs.values()].flat().map((n) => n.partners);
+  const covers = (y: ReportRow, x: ReportRow) =>
+    y.name === x.name && y.kind === 'minor' && y.bucket === x.bucket && (!x.fixesVuln || y.fixesVuln) && x.fixes.every((k) => y.fixes.includes(k)) && partnerLists.every((ps) => !ps.includes(x) || ps.includes(y));
+  return rows.filter((x) => x.kind !== 'patch' || !rows.some((y) => covers(y, x)));
+}
 
 /** Lowest version a range allows, for the simple forms ("^1.2.3", ">=1.2.3 <2", "^1 || ^2"); null when it can't be told. */
 function lowestOf(range: string): string | null {
@@ -130,6 +154,8 @@ function lowestOf(range: string): string | null {
 interface VulnGroup {
   row: VulnRow;
   hits: Hit[];
+  /** its Advisories with no fixed version: while there are any, no upgrade or Pin is claimed to fix the row */
+  unfixed: string[];
 }
 
 /** One group per affected package@version, from the hits the Findings report. */
@@ -139,7 +165,7 @@ function vulnGroups(r: ScanResult, s: Settings): Map<string, VulnGroup> {
     const key = `${h.vuln.pkg}@${h.vuln.version}`;
     let g = groups.get(key);
     if (!g) {
-      g = { row: { name: h.vuln.pkg, version: h.vuln.version, direct: false, parents: [], severity: h.vuln.severity, advisories: [], fixes: [] }, hits: [] };
+      g = { row: { name: h.vuln.pkg, version: h.vuln.version, direct: false, parents: [], severity: h.vuln.severity, advisories: [], fixes: [] }, hits: [], unfixed: [] };
       groups.set(key, g);
     }
     g.hits.push(h);
@@ -148,32 +174,37 @@ function vulnGroups(r: ScanResult, s: Settings): Map<string, VulnGroup> {
     if (!x.parents.includes(h.root)) x.parents.push(h.root);
     if (!x.advisories.includes(h.vuln.id)) x.advisories.push(h.vuln.id);
     if (SEVERITY_RANK[h.vuln.severity] > SEVERITY_RANK[x.severity]) x.severity = h.vuln.severity;
+    if (!h.vuln.fixedIn && !g.unfixed.includes(h.vuln.id)) g.unfixed.push(h.vuln.id);
     if (h.vuln.fixedIn && (!x.fixedIn || compare(h.vuln.fixedIn, x.fixedIn) > 0)) x.fixedIn = h.vuln.fixedIn;
   }
-  for (const { row } of groups.values()) {
-    row.parents.sort();
-    row.advisories.sort();
+  for (const g of groups.values()) {
+    g.row.parents.sort();
+    g.row.advisories.sort();
+    g.unfixed.sort();
+    // no version fixes every Advisory of the row
+    if (g.unfixed.length) delete g.row.fixedIn;
   }
   return groups;
 }
 
 /**
  * The Vulnerability rows an upgrade of `name` to `target` fixes. A Transitive vulnerability counts only when the vulnerable package
- * is a direct child of `name` on its path and the lowest version of the target's own range for it reaches the fixed version.
+ * is a direct child of `name` on every path from `name` to that copy, and the lowest version of the target's own range for it reaches
+ * the fixed version. A row with an Advisory that has no fixed version is never claimed.
  */
 function fixedBy(name: string, target: string, r: ScanResult, groups: Map<string, VulnGroup>, directFix: boolean): string[] {
   const deps = r.info.get(name)?.manifests[target]?.dependencies;
   const out: string[] = [];
   for (const [key, g] of groups) {
     const mine = g.hits.filter((h) => h.root === name);
-    if (!mine.length) continue;
+    if (!mine.length || !g.row.fixedIn) continue;
     if (mine.some((h) => h.path.length === 1)) {
       if (directFix) out.push(key);
       continue;
     }
-    const range = g.row.fixedIn && mine.some((h) => h.path.length === 2) ? deps?.[g.row.name] : undefined;
+    const range = mine.every((h) => h.path.length === 2) ? deps?.[g.row.name] : undefined;
     const lo = range ? lowestOf(range) : null;
-    if (lo && g.row.fixedIn && compare(lo, g.row.fixedIn) >= 0) out.push(key);
+    if (lo && compare(lo, g.row.fixedIn) >= 0) out.push(key);
   }
   return out;
 }
@@ -182,7 +213,13 @@ const fixTitle = (t: string) => t.replace(/ \(fixes .*\)$/, '');
 
 /** Fill in each Vulnerability row's Fixes: the Update or Pin its Findings offer, the upgrades that fix it, or why there is none. */
 function describeFixes(r: ScanResult, findings: Finding[], groups: Map<string, VulnGroup>, rows: ReportRow[]) {
-  for (const [key, { row: x, hits }] of groups) {
+  for (const [key, { row: x, hits, unfixed }] of groups) {
+    if (unfixed.length) {
+      // a Fix would leave these Advisories open, so none is offered
+      x.fixes = [];
+      x.noFix = `no fixed version known for ${unfixed.join(', ')}`;
+      continue;
+    }
     const fixes = new Set<string>();
     for (const f of findings) {
       for (const fx of f.fixes) {
@@ -243,12 +280,14 @@ export function buildUpgradeReport(r: ScanResult, findings: Finding[], s: Settin
     const dep = info.deprecated[installed];
     if (dep) deprecated.push({ name: e.name, installed, message: dep });
     const fix = vulnFixVersion(findings, e.name);
+    // an Advisory of the installed copy with no fixed version: no Update is claimed to fix that copy
+    const ownUnfixed = !!groups.get(`${e.name}@${installed}`)?.unfixed.length;
     const targets = bumpTargets(installed, info.versions);
     for (const kind of ['patch', 'minor', 'major'] as BumpKind[]) {
       const target = targets[kind];
       if (!target) continue;
       const c = compat?.get(compatKey(e.name, target));
-      const directFix = !!fix && compare(target, fix) >= 0;
+      const directFix = !!fix && compare(target, fix) >= 0 && !ownUnfixed;
       const fixes = fixedBy(e.name, target, r, groups, directFix);
       const row: ReportRow = {
         name: e.name,
@@ -269,7 +308,8 @@ export function buildUpgradeReport(r: ScanResult, findings: Finding[], s: Settin
   }
   // the @types/node note blocks like any other note; patch rows are folded only once the final buckets are known
   for (const x of rows) checkNodeTypes(x, r.projectNode);
-  upgradeTogether(rows, compatOf, r);
+  const needs = needsOf(rows, compatOf, r);
+  settleBuckets(compatOf, needs);
 
   for (const [reason, why] of [['registry lookup failed', 'the registry lookup failed'], ['not installed', 'it is not installed']] as const) {
     const names = unchecked.filter((u) => u.reason === reason).map((u) => u.name);
@@ -281,7 +321,8 @@ export function buildUpgradeReport(r: ScanResult, findings: Finding[], s: Settin
   notes.push(...r.notes);
 
   // the Vulnerability rows name, and the summary counts, only the upgrades that survive the fold
-  const kept = dedupe(rows);
+  const kept = dedupe(rows, needs);
+  compatNotes(compatOf, needs, new Set(kept));
   describeFixes(r, findings, groups, kept);
   const vulns = [...groups.values()].map((g) => g.row).sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity] || a.name.localeCompare(b.name) || compare(a.version, b.version));
   const known = (direct: boolean) => vulns.filter((v) => v.direct === direct).reduce((n, v) => n + v.advisories.length, 0);
@@ -373,10 +414,12 @@ function installCommands(pm: PackageManager['name'], rows: ReportRow[]): string[
   return lines;
 }
 
+const cell = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+
 function table(rows: ReportRow[]): string[] {
   const out = ['| Package | Current | Target | Type | Notes |', '| --- | --- | --- | --- | --- |'];
   for (const x of rows) {
-    const notes = [...(x.fixesVuln ? [x.fixes.length ? `🔒 fixes ${x.fixes.join(', ')}` : '🔒 fixes a known vulnerability'] : []), ...x.notes].join('; ').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+    const notes = cell([...(x.fixesVuln ? [x.fixes.length ? `🔒 fixes ${x.fixes.join(', ')}` : '🔒 fixes a known vulnerability'] : []), ...x.notes].join('; '));
     out.push(`| ${x.name} | ${x.installed} | ${x.target} | ${x.kind} | ${notes} |`);
   }
   return out;
@@ -390,27 +433,28 @@ const VERDICT: Record<OverrideRow['verdict'], string> = {
   'not-checked': 'not checked',
 };
 
-const cell = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, ' ');
 const requested = (q: OverrideRequest) => `${q.range} (${q.by.map((b) => b || 'package.json').join(', ')})`;
 const wouldGet = (q: OverrideRequest) => `${requested(q)} would get ${q.fresh ?? 'no published version'}`;
 const withAdvisories = (q: OverrideRequest) => `${wouldGet(q)}, which has ${q.advisories.join(', ')}`;
 
 function overrideDetails(o: OverrideRow): string {
   const vulnerable = o.requests.filter((q) => q.advisories.length);
-  const forced = o.requests.filter((q) => q.otherMajor);
+  const forced = o.requests.filter((q) => q.outsideRange);
+  const unknown = o.requests.filter((q) => q.fresh && q.outsideRange === undefined);
+  const unchecked = unknown.length ? `; whether ${o.value} fits ${unknown.map(requested).join(', ')} was not checked` : '';
   switch (o.verdict) {
     case 'still-needed': {
       const also = forced.length ? `; it also forces ${forced.map(requested).join(', ')} onto ${o.forced}` : '';
-      return `without it, ${vulnerable.map(withAdvisories).join('; ')}${also}`;
+      return `without it, ${vulnerable.map(withAdvisories).join('; ')}${also}${unchecked}`;
     }
     case 'redundant': {
       const got = o.requests.filter((q) => q.fresh);
-      return got.length ? `without it, ${got.map(wouldGet).join('; ')}, with no known Advisory; it can be removed` : `every request already asks for ${o.value}; it can be removed`;
+      return got.length ? `without it, ${got.map(wouldGet).join('; ')}, with no known Advisory; it can be removed${unchecked}` : `every request already asks for ${o.value}; it can be removed`;
     }
     case 'forces-other-major': {
       const clean = forced.filter((q) => !q.advisories.length);
       const need = vulnerable.length ? `; it is still needed because ${vulnerable.map(withAdvisories).join('; ')}: scope it to the packages that need it` : '';
-      return `forces ${clean.map(requested).join(', ')} onto ${o.forced}; without it, they would get ${clean.map((q) => q.fresh).join(', ')}, with no known Advisory${need}`;
+      return `forces ${clean.map(requested).join(', ')} onto ${o.forced}, outside the requested range; without it, they would get ${clean.map((q) => q.fresh).join(', ')}, with no known Advisory${need}${unchecked}`;
     }
     case 'unused':
       return o.key === o.name ? `nothing in the lockfile requests ${o.name}; it can be removed` : `${o.key.includes('/') || o.key.includes('>') ? 'the parent package' : 'the lockfile'} does not request ${o.name} as the key names it; it can be removed`;
@@ -445,8 +489,10 @@ export function formatUpgradeReport(r: UpgradeReport): string {
     L.push('', '## 🛡️ Vulnerabilities', '', 'Every Vulnerability the scan found, one row per affected package version, with the direct dependencies that pull it in.', '');
     L.push('| Package | Severity | Advisories | Pulled in by | Fixed in | Fix |', '| --- | --- | --- | --- | --- | --- |');
     for (const v of r.vulns) {
-      const fix = [...(v.fixes.length ? v.fixes : [`none: ${v.noFix}`]), ...(v.hint ? [`yarn: ${v.hint}`] : [])].join('; ').replace(/\|/g, '\\|');
-      L.push(`| ${v.name}@${v.version} | ${v.severity} | ${v.advisories.join(', ')} | ${v.direct ? 'direct' : v.parents.join(', ')} | ${v.fixedIn ?? '–'} | ${fix} |`);
+      const fix = [...(v.fixes.length ? v.fixes : [`none: ${v.noFix}`]), ...(v.hint ? [`yarn: ${v.hint}`] : [])].join('; ');
+      // a direct copy can also be pulled in by other direct dependencies
+      const by = v.direct ? ['direct', ...v.parents.filter((p) => p !== v.name)] : v.parents;
+      L.push(`| ${cell(`${v.name}@${v.version}`)} | ${v.severity} | ${cell(v.advisories.join(', '))} | ${cell(by.join(', '))} | ${v.fixedIn ?? '–'} | ${cell(fix)} |`);
     }
   }
 
