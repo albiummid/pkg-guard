@@ -77,6 +77,13 @@ export function pinsEffect(text: string, pins: PinRequest[], pkgFile?: string): 
   return file ? { type: 'edit', edits, file } : { type: 'edit', edits };
 }
 
+/** Without node_modules: the installed version's manifest from the scan's registry data (lockfile version). */
+function scannedManifest(c: CompatContext, name: string) {
+  const v = c.installed?.get(name);
+  const m = v ? c.infos?.get(name)?.manifests[v] : undefined;
+  return m && { ...m, version: v };
+}
+
 /** What else changes if `name` goes from its installed version to `target`. */
 export async function compatFor(c: CompatContext): Promise<CompatReport> {
   const dir = path.dirname(c.pkgFile);
@@ -88,12 +95,12 @@ export async function compatFor(c: CompatContext): Promise<CompatReport> {
   const dependents: Dependent[] = [];
   for (const e of locateDeps(c.text)) {
     if (e.name === c.name) continue;
-    const m = readInstalledPkg(dir, e.name);
+    const m = readInstalledPkg(dir, e.name) ?? scannedManifest(c, e.name);
     const range: string | undefined = m?.peerDependencies?.[c.name];
     if (!m || range === undefined) continue;
     const dep: Dependent = { name: e.name, version: m.version, peerRange: range, optional: !!m.peerDependenciesMeta?.[c.name]?.optional };
     if (!satisfies(c.target, range)) {
-      const depInfo = await fetchInfo(e.name, c.registry, { dir: path.dirname(c.pkgFile), trusted: c.trusted });
+      const depInfo = c.infos?.get(e.name) ?? (await fetchInfo(e.name, c.registry, { dir: path.dirname(c.pkgFile), trusted: c.trusted }));
       if (depInfo) dep.fixedBy = findCompanion(depInfo.versions, depInfo.manifests, c.name, c.target, m.version);
     }
     dependents.push(dep);

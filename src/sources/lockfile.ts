@@ -12,9 +12,12 @@ function nameOfSpec(spec: string): string {
   return alias ? alias[1] : spec.slice(0, spec.lastIndexOf('@'));
 }
 
+/** A yarn berry (v2+) lockfile starts with a `__metadata:` block; classic (v1) lockfiles have none. */
+export const isBerryLock = (text: string): boolean => /^__metadata:/m.test(text);
+
 /** Parses yarn classic (v1) lockfiles. Returns null for yarn berry (see parseBerryLock). */
 export function parseYarnLock(text: string): Map<string, YarnPkg> | null {
-  if (/^__metadata:/m.test(text)) return null;
+  if (isBerryLock(text)) return null;
   const index = new Map<string, YarnPkg>();
   let cur: { specs: string[]; pkg: YarnPkg } | null = null;
   let inDeps = false;
@@ -115,7 +118,7 @@ export function buildYarnGraph(text: string, rootDeps: Record<string, string>, f
   let index: Map<string, YarnPkg>;
   let find: (d: string, r: string) => YarnPkg | undefined;
   let ranges = rootDeps;
-  if (/^__metadata:/m.test(text)) {
+  if (isBerryLock(text)) {
     const lock = parseBerryLock(text);
     index = lock.index;
     find = (d, r) => index.get(berryKey(d, r));
@@ -267,4 +270,71 @@ export function buildBunGraph(text: string, rootDeps: Record<string, string>): G
     if (t) roots.set(d, t);
   }
   return { kind: 'bun', nodes, roots };
+}
+
+/** A range one package (or the project, `by: ''`) requests for another, as recorded in a lockfile. */
+export interface LockRequest {
+  name: string;
+  range: string;
+  by: string;
+}
+
+/** Package name and range of a dependency range, following an npm alias (`npm:real@^1` installs `real`). */
+function requestOf(name: string, range: string): { name: string; range: string } {
+  const alias = /^npm:(@?[^@]+)@(.*)$/.exec(range);
+  if (alias) return { name: alias[1], range: alias[2] };
+  return { name, range: range.replace(/^npm:/, '') };
+}
+
+/** Package name and range of a lockfile key (`name@range`, `name@npm:range`, `alias@npm:real@range`). */
+function specRequest(spec: string): { name: string; range: string } {
+  const at = spec.indexOf('@', 1);
+  return requestOf(spec.slice(0, at), spec.slice(at + 1));
+}
+
+/**
+ * Every range requested in a yarn.lock (classic or berry): what each package's entry asks for, what the workspaces ask for, and
+ * the keys no package asks for (the project's own requests, including a resolution's range) with `by: ''`.
+ */
+export function lockRequests(text: string): LockRequest[] | null {
+  const out = new Map<string, LockRequest>();
+  const add = (q: LockRequest) => out.set(`${q.name}@${q.range}@${q.by}`, q);
+  let index: Map<string, YarnPkg>;
+  if (isBerryLock(text)) {
+    const lock = parseBerryLock(text);
+    index = lock.index;
+    for (const deps of lock.workspaces.values()) for (const [d, r] of Object.entries(deps)) add({ ...requestOf(d, r), by: '' });
+  } else {
+    const classic = parseYarnLock(text);
+    if (!classic) return null;
+    index = classic;
+  }
+  for (const p of new Set(index.values())) for (const [d, r] of Object.entries(p.deps)) add({ ...requestOf(d, r), by: p.name });
+  const asked = new Set([...out.values()].map((q) => `${q.name}@${q.range}`));
+  for (const spec of index.keys()) {
+    const q = specRequest(spec);
+    if (!asked.has(`${q.name}@${q.range}`)) add({ ...q, by: '' });
+  }
+  return [...out.values()];
+}
+
+/**
+ * Every range requested in a package-lock.json v2/v3: by each installed package, and by the project (`by: ''`) and its workspace members.
+ * Null for a v1 lockfile (no `packages` section), whose ranges cannot be read this way.
+ */
+export function npmLockRequests(json: any): LockRequest[] | null {
+  if (!json?.packages || typeof json.packages !== 'object') return null;
+  const out = new Map<string, LockRequest>();
+  for (const [key, p] of Object.entries<any>(json.packages)) {
+    if (!p || typeof p !== 'object' || p.link) continue;
+    const inModules = key.includes('node_modules/');
+    const by = !inModules ? '' : typeof p.name === 'string' && p.name ? p.name : key.slice(key.lastIndexOf('node_modules/') + 'node_modules/'.length);
+    const deps: Record<string, string> = { ...p.peerDependencies, ...p.optionalDependencies, ...p.dependencies, ...(inModules ? {} : p.devDependencies) };
+    for (const [d, r] of Object.entries(deps)) {
+      if (typeof r !== 'string') continue;
+      const q = { ...requestOf(d, r), by };
+      out.set(`${q.name}@${q.range}@${by}`, q);
+    }
+  }
+  return [...out.values()];
 }

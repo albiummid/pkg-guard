@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { test } from 'node:test';
 import { attribute, auditInvocation, parseNpmAudit, parseYarnAudit } from '../sources/audit';
 import { buildFindings } from '../analysis/findings';
-import { buildNpmGraph, buildYarnGraph } from '../sources/lockfile';
+import { buildNpmGraph, buildYarnGraph, lockRequests } from '../sources/lockfile';
 import { clearOsvCache, cvssScore, osvQuery, severityOf, toVuln } from '../sources/osv';
 import { clearRegistryCache, fetchInfo } from '../sources/registry';
 import { addToSection, locateDeps } from '../manifest/packageJson';
@@ -219,6 +219,40 @@ test('a transient registry failure is retried soon while a missing package is re
       assert.equal(notFound, 1);
     },
   );
+});
+
+test('a registry lookup is retried once after a timeout, network error or 5xx', async () => {
+  const ok = () => json({ 'dist-tags': { latest: '2.0.0' }, versions: { '2.0.0': {} } });
+  for (const first of [
+    () => Promise.reject(new DOMException('The operation was aborted due to timeout', 'TimeoutError')),
+    () => Promise.reject(new TypeError('fetch failed')),
+    () => json({}, 503),
+  ]) {
+    clearRegistryCache();
+    let calls = 0;
+    await withFetch(
+      () => (++calls === 1 ? first() : ok()),
+      async () => {
+        assert.equal((await fetchInfo('big', 'https://registry.example'))?.latest, '2.0.0');
+        assert.equal(calls, 2);
+      },
+    );
+  }
+  clearRegistryCache();
+  let calls = 0;
+  await withFetch(
+    () => {
+      calls++;
+      return Promise.reject(new TypeError('fetch failed'));
+    },
+    async () => {
+      assert.equal(await fetchInfo('down', 'https://registry.example'), null);
+      assert.equal(calls, 2);
+      assert.equal(await fetchInfo('down', 'https://registry.example'), null); // the failure is remembered briefly
+      assert.equal(calls, 2);
+    },
+  );
+  clearRegistryCache();
 });
 
 // ---------------------------------------------------------------- findings
@@ -563,6 +597,16 @@ test('yarn berry graph resolves ranges, aliases and each workspace member from i
   assert.equal(api.roots.get('express'), 'express@5.0.1');
   const hits = attribute(api, new Map([['body-parser@2.0.2', [{ pkg: 'body-parser', version: '2.0.2' } as any]]]));
   assert.equal(hits[0].root, 'express');
+});
+
+test('yarn berry lockfile: requested ranges per package, from packages, workspaces and aliases', () => {
+  const reqs = lockRequests(BERRY)!;
+  const of = (name: string) => reqs.filter((q) => q.name === name).map((q) => `${q.range} by ${q.by || '(project)'}`).sort();
+  assert.deepEqual(of('body-parser'), ['^1.0.0 by express', '^1.1.0 by (project)', '^2.0.0 by express']);
+  assert.deepEqual(of('express'), ['^4.0.0 by (project)', '^5.0.0 by (project)']);
+  // an alias requests the package it installs
+  assert.deepEqual(of('string-width'), ['^4.2.0 by (project)']);
+  assert.deepEqual(of('string-width-cjs'), []);
 });
 
 test('a Pin for a bun project goes to overrides', () => {

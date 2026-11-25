@@ -51,13 +51,23 @@ function guessedLead(name: string, range: string, installed: string | undefined,
   return `${name} may be vulnerable (version guessed from ${range}${list ? `, which allows affected ${list}` : ''})`;
 }
 
-export function buildFindings(r: ScanResult, s: Settings): Finding[] {
-  const out: Finding[] = [];
+/** The hits the Findings report: those at or above the minimum Severity whose Advisory is not ignored. */
+export function reportedHits(r: ScanResult, s: Settings): Hit[] {
+  const reported = reportable(s);
+  return r.hits.filter((h) => reported(h.vuln));
+}
+
+/** Whether an Advisory passes the minimum Severity and is not ignored (by id or alias). */
+export function reportable(s: Settings): (v: Vuln) => boolean {
   const minRank = SEVERITY_RANK[s.minSeverity];
   const ignored = new Set(s.ignoredAdvisories);
   // an advisory with no rating is never filtered out by the minimum: hiding what nobody has rated would hide malware records too
-  const isIgnored = (v: Vuln) => ignored.has(v.id) || !!v.aliases?.some((a) => ignored.has(a));
-  const hits = r.hits.filter((h) => (h.vuln.severity === 'unknown' || SEVERITY_RANK[h.vuln.severity] >= minRank) && !isIgnored(h.vuln));
+  return (v) => (v.severity === 'unknown' || SEVERITY_RANK[v.severity] >= minRank) && !ignored.has(v.id) && !v.aliases?.some((a) => ignored.has(a));
+}
+
+export function buildFindings(r: ScanResult, s: Settings): Finding[] {
+  const out: Finding[] = [];
+  const hits = reportedHits(r, s);
   const overrideSection = r.pm.overrideSection;
 
   for (const e of r.entries) {

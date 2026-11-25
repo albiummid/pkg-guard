@@ -27,15 +27,24 @@ export function fetchInfo(name: string, registry: string, scope?: NpmrcScope): P
   return p;
 }
 
+/** Large packuments (over 10 MB) need a generous timeout; a timeout, network error or 5xx is retried once. */
+async function fetchPackument(name: string, registry: string, authorization: string | undefined): Promise<Response> {
+  const url = `${registry.replace(/\/$/, '')}/${name.replace('/', '%2f')}`;
+  const get = () => fetch(url, { headers: { accept: 'application/vnd.npm.install-v1+json', ...(authorization ? { authorization } : {}) }, signal: AbortSignal.timeout(30000) });
+  try {
+    const res = await get();
+    if (res.status < 500) return res;
+  } catch {
+    /* retried below */
+  }
+  return get();
+}
+
 async function load(name: string, registry: string, authorization: string | undefined, key: string): Promise<RegistryInfo | null> {
   let info: RegistryInfo | null = null;
   let ttl = TTL;
   try {
-    const url = `${registry.replace(/\/$/, '')}/${name.replace('/', '%2f')}`;
-    const res = await fetch(url, {
-      headers: { accept: 'application/vnd.npm.install-v1+json', ...(authorization ? { authorization } : {}) },
-      signal: AbortSignal.timeout(15000),
-    });
+    const res = await fetchPackument(name, registry, authorization);
     if (res.ok) {
       const j: any = await res.json();
       const deprecated: Record<string, string> = {};

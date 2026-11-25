@@ -53,8 +53,41 @@ test('checkCompat: peers, node engines, dependents with companion updates', () =
   assert.match(text, /error:old-lib@1\.0\.0 .*no newer old-lib accepts/);
   assert.doesNotMatch(text, /fine-lib/);
   assert.deepEqual(r.companions.map((c) => `${c.name} ${c.from}->${c.to}`), ['@nestjs/jwt 11.0.2->12.0.3']);
+  assert.deepEqual(r.issues.find((x) => x.text.startsWith('needs peer @nestjs/core'))?.peer, { name: '@nestjs/core', range: '^12.0.0' });
+  assert.deepEqual(r.issues.find((x) => x.text.startsWith('@nestjs/jwt'))?.dependent, { name: '@nestjs/jwt', range: '^10.0.0 || ^11.0.0' });
   assert.match(formatReport('@nestjs/common', '11.2.3', '12.2.0', r), /Companion updates:/);
   assert.match(formatReport('x', '1.0.0', '1.0.1', { issues: [], companions: [] }), /No compatibility problems/);
+});
+
+test('checkCompat: problems the Installed version already has are info, already the case; new ones keep their Level', () => {
+  const installed: Record<string, string> = { ioredis: '6.0.0', react: '18.2.0' };
+  const r = checkCompat({
+    name: 'typeorm',
+    installed: '1.1.0',
+    target: '1.1.3',
+    current: { peerDependencies: { ioredis: '^5.0.0', '@types/inquirer': '^8.0.0' }, engines: { node: '>=24.11.0' } },
+    next: { peerDependencies: { ioredis: '^5.0.4', '@types/inquirer': '^8.1.3', react: '^19.0.0' }, engines: { node: '>=24.11.0' } },
+    installedOf: (d) => installed[d],
+    projectNode: '>=24.0.0',
+    dependents: [
+      { name: 'old-plugin', version: '1.0.0', peerRange: '^0.3.0' },
+      { name: 'new-break', version: '2.0.0', peerRange: '>=1.0.0 <1.1.2' },
+    ],
+  });
+  const text = r.issues.map((x) => `${x.level}:${x.text}`).join('\n');
+  assert.match(text, /info:needs peer ioredis \^5\.0\.4, but 6\.0\.0 is installed; already the case with installed typeorm@1\.1\.0/);
+  assert.match(text, /info:needs peer @types\/inquirer \^8\.1\.3, which is not installed; already the case with installed typeorm@1\.1\.0/);
+  assert.match(text, /info:requires Node >=24\.11\.0, .*; already the case with installed typeorm@1\.1\.0/);
+  assert.match(text, /info:old-plugin@1\.0\.0 peers on typeorm \^0\.3\.0 .*; already the case with installed typeorm@1\.1\.0/);
+  // genuinely new: the installed version has no react peer, and new-break accepts 1.1.0 but not 1.1.3
+  assert.match(text, /^error:needs peer react \^19\.0\.0, but 18\.2\.0 is installed$/m);
+  assert.match(text, /^error:new-break@2\.0\.0 peers on typeorm/m);
+  assert.deepEqual(r.issues.find((x) => x.text.startsWith('needs peer react'))?.peer, { name: 'react', range: '^19.0.0' });
+  assert.equal(r.issues.filter((x) => x.alreadyTheCase).length, 4);
+
+  // an engine the installed version met is a new problem
+  const node = checkCompat({ name: 'x', installed: '1.0.0', target: '2.0.0', current: { engines: { node: '>=18' } }, next: { engines: { node: '>=26' } }, installedOf: () => undefined, projectNode: '>=24.0.0', dependents: [] });
+  assert.deepEqual(node.issues.map((x) => x.level), ['warning']);
 });
 
 test('findCompanion: newest version accepting the target, newer than current', () => {

@@ -36,7 +36,7 @@ export interface ScanOptions {
 }
 
 /** The nearest lockfile of any package manager. `kind` is null for the ones this tool cannot read. */
-async function findLock(dir: string, stopAt?: string): Promise<{ file: string; kind: LockKind | null; pm: PackageManager['name'] } | null> {
+export async function findLock(dir: string, stopAt?: string): Promise<{ file: string; kind: LockKind | null; pm: PackageManager['name'] } | null> {
   for (let d = dir; ; d = path.dirname(d)) {
     for (const l of LOCKFILES) {
       if (await exists(path.join(d, l.file))) return { file: path.join(d, l.file), kind: l.readable, pm: l.pm };
@@ -98,6 +98,7 @@ export async function scan(text: string, pkgFile: string, s: Settings, opts: Sca
     return result;
   }
   const dir = path.dirname(pkgFile);
+  if (typeof pkg?.engines?.node === 'string') result.projectNode = pkg.engines.node;
   result.pm = detectPm(dir, pkg, stopAt);
   // A Pin goes to the workspace root manifest, so what that manifest declares decides whether a Pin is safe.
   if (result.pm.root) {

@@ -37,4 +37,6 @@ export interface ScanResult {
   pm: PackageManager;
   source: 'osv' | 'audit' | 'none';
   notes: string[];
+  /** `engines.node` of the scanned manifest, if any */
+  projectNode?: string;
 }

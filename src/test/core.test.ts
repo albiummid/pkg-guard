@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { test } from 'node:test';
 import { attribute, parseNpmAudit, parseYarnAudit } from '../sources/audit';
 import { buildFindings } from '../analysis/findings';
-import { buildBunGraph, buildNpmGraph, buildYarnGraph } from '../sources/lockfile';
+import { buildBunGraph, buildNpmGraph, buildYarnGraph, lockRequests, npmLockRequests } from '../sources/lockfile';
 import { fixedFor } from '../sources/osv';
 import { addToSection, locateDeps } from '../manifest/packageJson';
 import { pickAtLeast, suggest } from '../sources/registry';
@@ -116,6 +116,32 @@ test('yarn graph + attribution of transitive vulns to the direct dependency', ()
   assert.deepEqual(bp.path, ['@nestjs/platform-express', 'express', 'body-parser']);
   // multer is itself a direct dependency, so it is reported once on its own line, not again under platform-express
   assert.deepEqual(hits.filter((h) => h.vuln.pkg === 'multer').map((h) => h.root), ['multer']);
+});
+
+test('yarn classic lockfile: the ranges each package requests, and the keys of the project', () => {
+  const reqs = lockRequests(YARN)!;
+  const of = (name: string) => reqs.filter((q) => q.name === name).map((q) => `${q.range} by ${q.by || '(project)'}`).sort();
+  assert.deepEqual(of('multer'), ['2.2.0 by @nestjs/platform-express']);
+  assert.deepEqual(of('body-parser'), ['^2.2.0 by express']);
+  assert.deepEqual(of('express'), ['5.1.0 by @nestjs/platform-express']);
+  // keys nothing in the lockfile asks for are the project's own requests (dependencies, or a resolution's range)
+  assert.deepEqual(of('lodash'), ['4.17.21 by (project)']);
+  assert.deepEqual(of('@nestjs/platform-express'), ['11.2.3 by (project)']);
+});
+
+test('npm lockfile: the ranges each package and the project request', () => {
+  const lock = {
+    packages: {
+      '': { dependencies: { a: '^1' }, devDependencies: { c: '~3.1.0' } },
+      'node_modules/a': { version: '1.0.0', dependencies: { b: '^1' } },
+      'node_modules/b': { version: '1.0.0' },
+      'node_modules/c': { version: '3.1.2', dependencies: { b: '^2.0.0' } },
+      'node_modules/c/node_modules/b': { version: '2.0.0' },
+    },
+  };
+  const reqs = npmLockRequests(lock)!;
+  assert.deepEqual(reqs.filter((q) => q.name === 'b').map((q) => `${q.range} by ${q.by}`).sort(), ['^1 by a', '^2.0.0 by c']);
+  assert.deepEqual(reqs.filter((q) => q.name === 'c'), [{ name: 'c', range: '~3.1.0', by: '' }]);
 });
 
 test('npm lock v3 graph resolves nested node_modules', () => {

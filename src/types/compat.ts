@@ -12,6 +12,8 @@ export interface CompatContext {
   trusted?: boolean;
   /** installed versions from the last scan; node_modules is the fallback */
   installed?: Map<string, string>;
+  /** registry data from the last scan; gives dependents' peer ranges when node_modules is absent */
+  infos?: Map<string, RegistryInfo>;
 }
 
 export interface Dependent {
@@ -37,9 +39,21 @@ export interface CompatInput {
   dependents: Dependent[];
 }
 
+/** A package and the peer range involved in a Compatibility issue. */
+export interface PeerRef {
+  name: string;
+  range: string;
+}
+
 export interface Issue {
   level: 'error' | 'warning' | 'info';
   text: string;
+  /** the peer the target needs, so the upgrade report can tell when another upgrade meets it */
+  peer?: PeerRef;
+  /** the installed dependent whose peer range on this package rejects the target */
+  dependent?: PeerRef;
+  /** the Installed version has the same problem, so the upgrade changes nothing (level is info) */
+  alreadyTheCase?: boolean;
 }
 
 export interface Companion {
