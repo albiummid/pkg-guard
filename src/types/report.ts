@@ -2,6 +2,7 @@ import type { BumpKind } from './bump';
 import type { CompatReport } from './compat';
 import type { Section, PackageManager } from './manifest';
 import type { Severity } from './vulnerability';
+import type { OverrideAudit } from './overrides';
 
 /**
  * safe: patch, or minor on >=1.0.0 (semver says no breaking changes)
@@ -66,6 +67,8 @@ export interface UpgradeReport {
   notes: string[];
   /** dependencies that got no rows, and why */
   unchecked: UncheckedDep[];
+  /** audit of the project's `resolutions` / `overrides`; absent when it has none */
+  overrides?: OverrideAudit;
 }
 
 export interface UncheckedDep {

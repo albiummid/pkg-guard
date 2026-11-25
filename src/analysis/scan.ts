@@ -36,7 +36,7 @@ export interface ScanOptions {
 }
 
 /** The nearest lockfile of any package manager. `kind` is null for the ones this tool cannot read. */
-async function findLock(dir: string, stopAt?: string): Promise<{ file: string; kind: LockKind | null; pm: PackageManager['name'] } | null> {
+export async function findLock(dir: string, stopAt?: string): Promise<{ file: string; kind: LockKind | null; pm: PackageManager['name'] } | null> {
   for (let d = dir; ; d = path.dirname(d)) {
     for (const l of LOCKFILES) {
       if (await exists(path.join(d, l.file))) return { file: path.join(d, l.file), kind: l.readable, pm: l.pm };
