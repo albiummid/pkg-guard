@@ -112,3 +112,72 @@ test('markdown: grouped sections with install commands for the detected package 
   assert.match(md, /yarn add -D tool@3\.0\.1/);
   assert.match(md, /yarn add lib@2\.0\.0/);
 });
+
+test('a peer another row upgrades to is "upgrade together", not caution; already-the-case notes are shown as info', () => {
+  const scan = scanOf([
+    { name: 'plugin', installed: '8.68.0', versions: ['8.68.0', '8.74.0'] },
+    { name: 'parser', installed: '8.68.0', versions: ['8.68.0', '8.74.0', '9.0.0'] },
+    { name: 'lonely', installed: '1.0.0', versions: ['1.0.0', '1.1.0'] },
+    { name: 'orm', installed: '1.1.0', versions: ['1.1.0', '1.1.3'] },
+  ]);
+  const compat: CompatMap = new Map([
+    [compatKey('plugin', '8.74.0'), { issues: [{ level: 'error', text: 'needs peer parser ^8.74.0, but 8.68.0 is installed', peer: { name: 'parser', range: '^8.74.0' } }], companions: [] }],
+    // only parser's major row meets ^9, and a major is not a safer bucket than a minor
+    [compatKey('lonely', '1.1.0'), { issues: [{ level: 'error', text: 'needs peer parser ^9.0.0, but 8.68.0 is installed', peer: { name: 'parser', range: '^9.0.0' } }], companions: [] }],
+    [compatKey('orm', '1.1.3'), { issues: [{ level: 'info', text: 'needs peer ioredis ^5, but 6.0.0 is installed; already the case with installed orm@1.1.0', alreadyTheCase: true }, { level: 'info', text: 'dependencies: adds 1 (x)' }], companions: [] }],
+  ]);
+  const r = buildUpgradeReport(scan, [], settings, 'p', compat);
+  assert.equal(rowOf(r, 'plugin', 'minor')?.bucket, 'safe');
+  assert.deepEqual(rowOf(r, 'plugin', 'minor')?.notes, ['upgrade together with parser@8.74.0']);
+  assert.equal(rowOf(r, 'lonely', 'minor')?.bucket, 'caution');
+  assert.deepEqual(rowOf(r, 'lonely', 'minor')?.notes, ['needs peer parser ^9.0.0, but 8.68.0 is installed']);
+  assert.equal(rowOf(r, 'orm', 'patch')?.bucket, 'safe');
+  assert.deepEqual(rowOf(r, 'orm', 'patch')?.notes, ['needs peer ioredis ^5, but 6.0.0 is installed; already the case with installed orm@1.1.0']);
+  assert.equal(r.summary.caution, 1);
+  assert.match(formatUpgradeReport(r), /\| plugin \| 8\.68\.0 \| 8\.74\.0 \| minor \| upgrade together with parser@8\.74\.0 \|/);
+});
+
+test('a pair upgraded together lands in the bucket of its riskier member', () => {
+  const scan = scanOf([
+    { name: 'a', installed: '1.0.0', versions: ['1.0.0', '1.1.0'] },
+    { name: 'b', installed: '1.0.0', versions: ['1.0.0', '1.1.0'] },
+  ]);
+  const compat: CompatMap = new Map([
+    [compatKey('a', '1.1.0'), { issues: [{ level: 'error', text: 'needs peer b ^1.1.0', peer: { name: 'b', range: '^1.1.0' } }], companions: [] }],
+    [compatKey('b', '1.1.0'), { issues: [{ level: 'warning', text: 'requires Node >=26' }], companions: [] }],
+  ]);
+  const r = buildUpgradeReport(scan, [], settings, 'p', compat);
+  assert.equal(rowOf(r, 'b', 'minor')?.bucket, 'caution');
+  assert.equal(rowOf(r, 'a', 'minor')?.bucket, 'caution');
+  assert.deepEqual(rowOf(r, 'a', 'minor')?.notes, ['upgrade together with b@1.1.0']);
+});
+
+test('major rows show what blocks them; majors of one family upgraded together do not flag each other', () => {
+  const scan = scanOf([
+    { name: 'common', installed: '11.2.3', versions: ['11.2.3', '12.0.0'] },
+    { name: 'jwt', installed: '11.0.2', versions: ['11.0.2', '12.0.0'] },
+    { name: 'blocker', installed: '1.0.0', versions: ['1.0.0'] },
+  ]);
+  scan.info.get('jwt')!.manifests['12.0.0'] = { peerDependencies: { common: '^12.0.0' } };
+  const compat: CompatMap = new Map([
+    [
+      compatKey('common', '12.0.0'),
+      {
+        issues: [
+          { level: 'error', text: 'jwt@11.0.2 peers on common ^10 || ^11 — update jwt to 12.0.0', dependent: { name: 'jwt', range: '^10 || ^11' } },
+          { level: 'error', text: 'blocker@1.0.0 peers on common ^11 and no newer blocker accepts 12.0.0', dependent: { name: 'blocker', range: '^11' } },
+          { level: 'info', text: 'dependencies: adds 1 (x)' },
+        ],
+        companions: [{ name: 'jwt', from: '11.0.2', to: '12.0.0', reason: 'peer common ^10 || ^11' }],
+      },
+    ],
+    [compatKey('jwt', '12.0.0'), { issues: [{ level: 'error', text: 'needs peer common ^12.0.0, but 11.2.3 is installed', peer: { name: 'common', range: '^12.0.0' } }], companions: [] }],
+  ]);
+  const r = buildUpgradeReport(scan, [], settings, 'p', compat);
+  assert.equal(rowOf(r, 'common', 'major')?.bucket, 'major');
+  assert.ok(rowOf(r, 'common', 'major')?.checked);
+  assert.deepEqual(rowOf(r, 'common', 'major')?.notes, ['blocker@1.0.0 peers on common ^11 and no newer blocker accepts 12.0.0']);
+  assert.deepEqual(rowOf(r, 'jwt', 'major')?.notes, []);
+  assert.equal(r.summary.major, 2);
+  assert.ok(!r.notes.some((n) => /could not be verified/.test(n)));
+});

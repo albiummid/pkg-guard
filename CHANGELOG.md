@@ -47,6 +47,7 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 - VS Code: workspace settings for the registry, install-after-fix and the audit fallback are ignored in untrusted workspaces; granting trust re-scans.
 - VS Code: fix titles are escaped in the hover, a hover link applies the Fix it shows even after a re-scan, a Fix is refused when the line changed since the scan, scripts run as a quoted task, installs use the terminal's working directory, and only web links from registry data are opened.
 - VS Code: only real `package.json` files on disk are scanned (not diff views), a closed file no longer gets its diagnostics back, a newer scan result is never replaced by an older one, "Re-scan" fetches fresh data, and the welcome view shows when there is no `package.json`.
+- Upgrade report: Compatibility issues are judged against the whole upgrade. A peer, Node-engine or dependent problem the Installed version already has is shown as info, "already the case", instead of a reason for caution; an upgrade whose peer another upgrade in the report meets reads "upgrade together with name@version" and is no longer counted as caution; major upgrades are checked too and name the packages that block them (and whether a newer version of them accepts the target), while packages of one family upgraded to the same major don't flag each other. Without `node_modules`, dependents' peer ranges are read from the registry data of the installed versions.
 
 ### Improvements
 

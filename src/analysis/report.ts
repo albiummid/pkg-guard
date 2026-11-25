@@ -3,7 +3,8 @@ import * as path from 'path';
 import { compatFor } from './fixes';
 import { bumpTargets } from '../versions/bump';
 import { baseVersion, compare, parse } from '../versions/semver';
-import { Bucket, BumpKind, CompatMap, CompatReport, DeprecatedRow, Finding, PackageManager, ReportRow, ScanResult, Section, Settings, UpgradeReport } from '../types';
+import { isRange, satisfies } from '../versions/satisfies';
+import { Bucket, BumpKind, CompatMap, CompatReport, DeprecatedRow, Finding, Issue, PackageManager, ReportRow, ScanResult, Section, Settings, UpgradeReport } from '../types';
 
 export const compatKey = (name: string, target: string) => `${name}@${target}`;
 
@@ -12,6 +13,68 @@ function bucketOf(installed: string, kind: BumpKind, compat?: CompatReport): Buc
   if (parse(installed)?.major === 0 && kind === 'minor') return 'caution';
   if (compat?.issues.some((i) => i.level !== 'info')) return 'caution';
   return 'safe';
+}
+
+const RANK: Record<Bucket, number> = { safe: 0, caution: 1, major: 2 };
+
+/**
+ * Another row, in the same or a safer bucket, that resolves `issue` of row `x`: its target meets the peer `x` needs,
+ * or it is the dependent whose peer range rejects `x`'s target and its new version accepts that target.
+ */
+function partnerOf(x: ReportRow, issue: Issue, rows: ReportRow[], r: ScanResult, c: CompatReport): ReportRow | undefined {
+  const fits = (y: ReportRow): boolean => {
+    if (y.name === x.name || RANK[y.bucket] > RANK[x.bucket]) return false;
+    if (issue.peer) return y.name === issue.peer.name && satisfies(y.target, issue.peer.range);
+    if (issue.dependent?.name !== y.name) return false;
+    const m = r.info.get(y.name)?.manifests[y.target];
+    if (!m) return c.companions.some((k) => k.name === y.name && k.to === y.target);
+    const range = m.peerDependencies?.[x.name];
+    return range === undefined || (isRange(range) && satisfies(x.target, range));
+  };
+  return rows.filter(fits).sort((a, b) => RANK[a.bucket] - RANK[b.bucket] || compare(a.target, b.target))[0];
+}
+
+/**
+ * Judges each row's Compatibility issues against the whole report: an issue another row's upgrade resolves becomes
+ * "upgrade together with name@target" (majors just drop it) and no longer counts toward caution; a pair lands in the
+ * bucket of its riskier member. Major rows keep their bucket and list what blocks them; already-the-case info is shown on the others.
+ */
+function upgradeTogether(rows: ReportRow[], compatOf: Map<ReportRow, CompatReport>, r: ScanResult) {
+  const partners = new Map<ReportRow, ReportRow[]>();
+  const decided = new Map<ReportRow, { bucket: Bucket; notes: string[] }>();
+  for (const [x, c] of compatOf) {
+    const notes = [...x.notes];
+    let blocked = notes.length > 0; // the 0.x minor note
+    const with_: ReportRow[] = [];
+    for (const issue of c.issues) {
+      if (issue.level === 'info') {
+        if (issue.alreadyTheCase && x.kind !== 'major') notes.push(issue.text);
+        continue;
+      }
+      const p = issue.peer || issue.dependent ? partnerOf(x, issue, rows, r, c) : undefined;
+      if (!p) {
+        blocked = true;
+        notes.push(issue.text);
+      } else if (!with_.includes(p)) {
+        with_.push(p);
+        if (x.kind !== 'major') notes.push(`upgrade together with ${p.name}@${p.target}`);
+      }
+    }
+    partners.set(x, with_);
+    decided.set(x, { bucket: x.kind === 'major' ? 'major' : blocked ? 'caution' : 'safe', notes });
+  }
+  for (const [x, d] of decided) Object.assign(x, d);
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const [x, with_] of partners) {
+      for (const p of with_) {
+        if (RANK[p.bucket] > RANK[x.bucket]) {
+          x.bucket = p.bucket;
+          changed = true;
+        }
+      }
+    }
+  }
 }
 
 /** Highest version that a vulnerability finding on `name` asks for, if any. */
@@ -32,6 +95,7 @@ export function buildUpgradeReport(r: ScanResult, findings: Finding[], s: Settin
   const rows: ReportRow[] = [];
   const deprecated: DeprecatedRow[] = [];
   const notes: string[] = [];
+  const compatOf = new Map<ReportRow, CompatReport>();
   let unchecked = 0;
 
   if (!s.enableOutdated) notes.push('Update checks are disabled (pkgGuard.enableOutdated), so no upgrades were collected.');
@@ -52,7 +116,7 @@ export function buildUpgradeReport(r: ScanResult, findings: Finding[], s: Settin
       const target = targets[kind];
       if (!target) continue;
       const c = compat?.get(compatKey(e.name, target));
-      rows.push({
+      const row: ReportRow = {
         name: e.name,
         section: e.section,
         range: e.range,
@@ -62,13 +126,13 @@ export function buildUpgradeReport(r: ScanResult, findings: Finding[], s: Settin
         bucket: bucketOf(installed, kind, c),
         fixesVuln: !!fix && compare(target, fix) >= 0,
         checked: !!c,
-        notes: [
-          ...(parse(installed)?.major === 0 && kind === 'minor' ? ['0.x minor releases may contain breaking changes'] : []),
-          ...(c?.issues.filter((i) => i.level !== 'info').map((i) => i.text) ?? []),
-        ],
-      });
+        notes: parse(installed)?.major === 0 && kind === 'minor' ? ['0.x minor releases may contain breaking changes'] : [],
+      };
+      rows.push(row);
+      if (c) compatOf.set(row, c);
     }
   }
+  upgradeTogether(rows, compatOf, r);
 
   if (unchecked) notes.push(`${unchecked} ${unchecked === 1 ? 'dependency was' : 'dependencies were'} not checked (not installed, not on the registry, or registry unavailable).`);
   if (rows.length && !compat) notes.push('Peer-dependency and Node-engine compatibility was not checked; "safe" only reflects the version numbers.');
@@ -88,7 +152,7 @@ export function buildUpgradeReport(r: ScanResult, findings: Finding[], s: Settin
 /** Run the peer / engines compatibility check for each candidate upgrade (network + node_modules); failures just leave that row unchecked. */
 export async function collectCompat(text: string, pkgFile: string, r: ScanResult, s: Settings): Promise<CompatMap> {
   const base = buildUpgradeReport(r, [], s);
-  const jobs = base.rows.filter((x) => x.kind !== 'major');
+  const jobs = base.rows;
   const out: CompatMap = new Map();
   let i = 0;
   await Promise.all(
@@ -98,7 +162,7 @@ export async function collectCompat(text: string, pkgFile: string, r: ScanResult
         const info = r.info.get(j.name);
         if (!info) continue;
         try {
-          out.set(compatKey(j.name, j.target), await compatFor({ text, pkgFile, name: j.name, target: j.target, info, registry: s.registry, trusted: s.trusted, installed: r.installed }));
+          out.set(compatKey(j.name, j.target), await compatFor({ text, pkgFile, name: j.name, target: j.target, info, registry: s.registry, trusted: s.trusted, installed: r.installed, infos: r.info }));
         } catch {
           /* leave unchecked */
         }

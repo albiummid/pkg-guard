@@ -6,6 +6,9 @@ export function checkCompat(i: CompatInput): CompatReport {
   const issues: Issue[] = [];
   const companions: Companion[] = [];
   const next = i.next ?? {};
+  // a problem the Installed version already has is not caused by the upgrade: info, labelled as already the case
+  const push = (issue: Issue, already: boolean) =>
+    issues.push(already ? { ...issue, level: 'info', text: `${issue.text}; already the case with installed ${i.name}@${i.installed}`, alreadyTheCase: true } : issue);
 
   if (next.deprecated) issues.push({ level: 'warning', text: `${i.name}@${i.target} is deprecated: ${next.deprecated}` });
 
@@ -14,10 +17,12 @@ export function checkCompat(i: CompatInput): CompatReport {
     const optional = !!next.peerDependenciesMeta?.[peer]?.optional;
     const have = i.installedOf(peer);
     if (!isRange(range)) continue;
+    const was = i.installed ? i.current?.peerDependencies?.[peer] : undefined;
+    const failedBefore = was !== undefined && isRange(was) && (have ? !satisfies(have, was) : !i.current?.peerDependenciesMeta?.[peer]?.optional);
     if (!have) {
-      if (!optional) issues.push({ level: 'warning', text: `needs peer ${peer} ${range}, which is not installed` });
+      if (!optional) push({ level: 'warning', text: `needs peer ${peer} ${range}, which is not installed`, peer: { name: peer, range } }, failedBefore);
     } else if (!satisfies(have, range)) {
-      issues.push({ level: optional ? 'warning' : 'error', text: `needs peer ${peer} ${range}, but ${have} is installed` });
+      push({ level: optional ? 'warning' : 'error', text: `needs peer ${peer} ${range}, but ${have} is installed`, peer: { name: peer, range } }, failedBefore);
     }
   }
 
@@ -26,7 +31,8 @@ export function checkCompat(i: CompatInput): CompatReport {
   if (needNode && i.projectNode && isRange(needNode)) {
     const base = baseVersion(i.projectNode);
     if (base && !satisfies(base, needNode)) {
-      issues.push({ level: 'warning', text: `requires Node ${needNode}, but the project allows ${i.projectNode}` });
+      const was = i.installed ? i.current?.engines?.node : undefined;
+      push({ level: 'warning', text: `requires Node ${needNode}, but the project allows ${i.projectNode}` }, !!was && isRange(was) && !satisfies(base, was));
     }
   }
 
@@ -50,11 +56,13 @@ export function checkCompat(i: CompatInput): CompatReport {
   for (const d of i.dependents) {
     if (!isRange(d.peerRange) || satisfies(i.target, d.peerRange)) continue;
     const level = d.optional ? 'warning' : 'error';
+    const dependent = { name: d.name, range: d.peerRange };
+    const already = !!i.installed && !satisfies(i.installed, d.peerRange);
     if (d.fixedBy) {
-      issues.push({ level, text: `${d.name}@${d.version} peers on ${i.name} ${d.peerRange} — update ${d.name} to ${d.fixedBy}` });
+      push({ level, text: `${d.name}@${d.version} peers on ${i.name} ${d.peerRange} — update ${d.name} to ${d.fixedBy}`, dependent }, already);
       companions.push({ name: d.name, from: d.version, to: d.fixedBy, reason: `peer ${i.name} ${d.peerRange}` });
     } else {
-      issues.push({ level, text: `${d.name}@${d.version} peers on ${i.name} ${d.peerRange} and no newer ${d.name} accepts ${i.target}` });
+      push({ level, text: `${d.name}@${d.version} peers on ${i.name} ${d.peerRange} and no newer ${d.name} accepts ${i.target}`, dependent }, already);
     }
   }
   return { issues, companions };
