@@ -1,9 +1,11 @@
 // Editor-independent upgrade report shared by the VS Code extension and the JetBrains sidecar (server.ts). No `vscode` imports here.
 import * as path from 'path';
 import { compatFor } from './fixes';
+import { auditOverrides } from './overrides';
 import { bumpTargets } from '../versions/bump';
 import { baseVersion, compare, parse } from '../versions/semver';
 import { Bucket, BumpKind, CompatMap, CompatReport, DeprecatedRow, Finding, PackageManager, ReportRow, ScanResult, Section, Settings, UpgradeReport } from '../types';
+import { OverrideAudit, OverrideRequest, OverrideRow } from '../types/overrides';
 
 export const compatKey = (name: string, target: string) => `${name}@${target}`;
 
@@ -28,7 +30,7 @@ function vulnFixVersion(findings: Finding[], name: string): string | undefined {
   return best;
 }
 
-export function buildUpgradeReport(r: ScanResult, findings: Finding[], s: Settings, title = 'project', compat?: CompatMap): UpgradeReport {
+export function buildUpgradeReport(r: ScanResult, findings: Finding[], s: Settings, title = 'project', compat?: CompatMap, overrides?: OverrideAudit): UpgradeReport {
   const rows: ReportRow[] = [];
   const deprecated: DeprecatedRow[] = [];
   const notes: string[] = [];
@@ -82,6 +84,7 @@ export function buildUpgradeReport(r: ScanResult, findings: Finding[], s: Settin
     deprecated,
     summary: { safe: count('safe'), caution: count('caution'), major: count('major'), security: rows.filter((x) => x.fixesVuln).length, deprecated: deprecated.length },
     notes,
+    ...(overrides?.rows.length ? { overrides } : {}),
   };
 }
 
@@ -116,7 +119,8 @@ export async function generateUpgradeReport(text: string, pkgFile: string, r: Sc
   } catch {
     /* keep folder name */
   }
-  const report = buildUpgradeReport(r, findings, s, title, await collectCompat(text, pkgFile, r, s));
+  const [compat, overrides] = await Promise.all([collectCompat(text, pkgFile, r, s), auditOverrides(text, pkgFile, r, s).catch(() => undefined)]);
+  const report = buildUpgradeReport(r, findings, s, title, compat, overrides);
   return { report, markdown: formatUpgradeReport(report) };
 }
 
@@ -149,6 +153,50 @@ function table(rows: ReportRow[]): string[] {
   return out;
 }
 
+const VERDICT: Record<OverrideRow['verdict'], string> = {
+  'still-needed': '🔒 still needed',
+  redundant: '🧹 no longer needed',
+  'forces-other-major': '⚠️ forces another major',
+  unused: 'unused',
+  'not-checked': 'not checked',
+};
+
+const cell = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+const requested = (q: OverrideRequest) => `${q.range} (${q.by.map((b) => b || 'package.json').join(', ')})`;
+const wouldGet = (q: OverrideRequest) => `${requested(q)} would get ${q.fresh ?? 'no published version'}`;
+const withAdvisories = (q: OverrideRequest) => `${wouldGet(q)}, which has ${q.advisories.join(', ')}`;
+
+function overrideDetails(o: OverrideRow): string {
+  const vulnerable = o.requests.filter((q) => q.advisories.length);
+  const forced = o.requests.filter((q) => q.otherMajor);
+  switch (o.verdict) {
+    case 'still-needed': {
+      const also = forced.length ? `; it also forces ${forced.map(requested).join(', ')} onto ${o.forced}` : '';
+      return `without it, ${vulnerable.map(withAdvisories).join('; ')}${also}`;
+    }
+    case 'redundant': {
+      const got = o.requests.filter((q) => q.fresh);
+      return got.length ? `without it, ${got.map(wouldGet).join('; ')}, with no known Advisory; it can be removed` : `every request already asks for ${o.value}; it can be removed`;
+    }
+    case 'forces-other-major': {
+      const clean = forced.filter((q) => !q.advisories.length);
+      const need = vulnerable.length ? `; it is still needed because ${vulnerable.map(withAdvisories).join('; ')}: scope it to the packages that need it` : '';
+      return `forces ${clean.map(requested).join(', ')} onto ${o.forced}; without it, they would get ${clean.map((q) => q.fresh).join(', ')}, with no known Advisory${need}`;
+    }
+    case 'unused':
+      return o.key === o.name ? `nothing in the lockfile requests ${o.name}; it can be removed` : `${o.key.includes('/') || o.key.includes('>') ? 'the parent package' : 'the lockfile'} does not request ${o.name} as the key names it; it can be removed`;
+    default:
+      return o.reason ?? '';
+  }
+}
+
+function overridesSection(a: OverrideAudit): string[] {
+  const L = ['', '## 🧷 Overrides', '', `Each entry in \`${a.section}\`, compared with what the packages requesting it would get without it.`, '', '| Entry | Value | Verdict | Details |', '| --- | --- | --- | --- |'];
+  for (const o of a.rows) L.push(`| ${cell(o.key)} | ${cell(o.value)} | ${VERDICT[o.verdict]} | ${cell(overrideDetails(o))} |`);
+  if (a.lockfile === 'yarn-classic') L.push('', 'With yarn v1, removing a resolution leaves the old version locked until its lockfile entries are re-resolved: delete those entries from yarn.lock, then run `yarn install`.');
+  return L;
+}
+
 export function formatUpgradeReport(r: UpgradeReport): string {
   const L: string[] = [`# Upgrade report: ${r.title}`, ''];
   const { safe, caution, major, security, deprecated } = r.summary;
@@ -169,6 +217,8 @@ export function formatUpgradeReport(r: UpgradeReport): string {
   group('✅ Safe to upgrade now', 'Patch releases and minor releases of stable (1.0.0+) packages. Semver promises no breaking changes, and no peer or engine conflicts were found.', r.rows.filter((x) => x.bucket === 'safe'));
   group('⚠️ Review before upgrading', '0.x minor releases (which may break) and upgrades with peer-dependency or Node-engine problems.', r.rows.filter((x) => x.bucket === 'caution'));
   group('🚨 Major upgrades (potentially breaking)', 'A new major version. Read the changelog before applying.', r.rows.filter((x) => x.bucket === 'major'));
+
+  if (r.overrides) L.push(...overridesSection(r.overrides));
 
   if (r.deprecated.length) {
     L.push('', '## 🗑️ Deprecated packages', '');

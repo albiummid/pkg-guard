@@ -1,6 +1,7 @@
 import type { BumpKind } from './bump';
 import type { CompatReport } from './compat';
 import type { Section, PackageManager } from './manifest';
+import type { OverrideAudit } from './overrides';
 
 /**
  * safe: patch, or minor on >=1.0.0 (semver says no breaking changes)
@@ -38,6 +39,8 @@ export interface UpgradeReport {
   summary: { safe: number; caution: number; major: number; security: number; deprecated: number };
   /** things the reader should know about, e.g. dependencies that could not be checked */
   notes: string[];
+  /** audit of the project's `resolutions` / `overrides`; absent when it has none */
+  overrides?: OverrideAudit;
 }
 
 export type CompatMap = Map<string, CompatReport>;

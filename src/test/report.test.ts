@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildUpgradeReport, compatKey, formatUpgradeReport } from '../analysis/report';
 import { CompatMap, CompatReport, Finding, RegistryInfo, ScanResult, Settings } from '../types';
+import { OverrideAudit } from '../types/overrides';
 
 const settings: Settings = { enableVulnerabilities: true, checkTransitive: true, enableOutdated: true, showMajorUpdates: true, checkSync: true, minSeverity: 'low', auditFallback: false, registry: 'https://registry.npmjs.org', ignoredAdvisories: [], ignoredPackages: [] };
 
@@ -111,4 +112,51 @@ test('markdown: grouped sections with install commands for the detected package 
   assert.match(md, /yarn add lib@1\.1\.0\n/); // minor supersedes the patch in one command
   assert.match(md, /yarn add -D tool@3\.0\.1/);
   assert.match(md, /yarn add lib@2\.0\.0/);
+});
+
+test('overrides: every verdict is rendered from the precomputed audit, after the upgrade sections', () => {
+  const scan = scanOf([{ name: 'lib', installed: '1.0.0', versions: ['1.0.0', '2.0.0'], deprecated: { '1.0.0': 'old' } }], 'yarn');
+  const audit: OverrideAudit = {
+    section: 'resolutions',
+    lockfile: 'yarn-classic',
+    rows: [
+      { key: 'uuid', name: 'uuid', value: '^11.1.1', verdict: 'still-needed', forced: '11.1.1', requests: [{ range: '^8.3.0', by: ['exceljs'], fresh: '8.3.2', advisories: ['GHSA-uuid'], otherMajor: true }] },
+      { key: 'body-parser', name: 'body-parser', value: '^2.4.0', verdict: 'redundant', forced: '2.4.0', requests: [{ range: '^2.2.1', by: ['express'], fresh: '2.4.0', advisories: [], otherMajor: false }] },
+      {
+        key: 'js-yaml',
+        name: 'js-yaml',
+        value: '^5.4.1',
+        verdict: 'forces-other-major',
+        forced: '5.5.0',
+        requests: [
+          { range: '^3.13.1', by: ['@istanbuljs/load-nyc-config'], fresh: '3.15.2', advisories: [], otherMajor: true },
+          { range: '5.3.0', by: ['@nestjs/swagger'], fresh: '5.3.0', advisories: ['GHSA-yaml'], otherMajor: false },
+        ],
+      },
+      { key: '**/parent/gone', name: 'gone', value: '1.0.0', verdict: 'unused', requests: [] },
+      { key: 'nested', name: 'nested', value: '', verdict: 'not-checked', reason: 'registry lookup failed', requests: [] },
+    ],
+  };
+  const r = buildUpgradeReport(scan, [], settings, 'p', undefined, audit);
+  assert.equal(r.overrides, audit);
+  const md = formatUpgradeReport(r);
+  const at = md.indexOf('## 🧷 Overrides');
+  assert.ok(at > md.indexOf('Major upgrades') && at < md.indexOf('Deprecated packages'));
+  const line = (key: string) => md.split('\n').find((l) => l.startsWith(`| ${key} |`)) ?? '';
+  assert.match(line('uuid'), /still needed.*\^8\.3\.0 \(exceljs\) would get 8\.3\.2, which has GHSA-uuid/);
+  assert.match(line('body-parser'), /no longer needed.*\^2\.2\.1 \(express\) would get 2\.4\.0/);
+  assert.match(line('js-yaml'), /forces another major.*\^3\.13\.1 \(@istanbuljs\/load-nyc-config\).*onto 5\.5\.0.*GHSA-yaml/);
+  assert.match(line('**/parent/gone'), /unused.*parent.*does not request gone/);
+  assert.match(line('nested'), /not checked.*registry lookup failed/);
+  assert.match(md, /yarn v1.*locked until its lockfile entries are re-resolved/);
+});
+
+test('overrides: no section without entries, and no yarn v1 reminder for other lockfiles', () => {
+  const scan = scanOf([{ name: 'lib', installed: '1.0.0', versions: ['1.0.0', '1.0.1'] }]);
+  assert.doesNotMatch(formatUpgradeReport(buildUpgradeReport(scan, [], settings, 'p', undefined, { section: 'overrides', lockfile: 'npm', rows: [] })), /Overrides/);
+  const md = formatUpgradeReport(
+    buildUpgradeReport(scan, [], settings, 'p', undefined, { section: 'pnpm.overrides', lockfile: 'pnpm', rows: [{ key: 'a', name: 'a', value: '1', verdict: 'not-checked', reason: 'pnpm lockfiles are not checked', requests: [] }] }),
+  );
+  assert.match(md, /`pnpm\.overrides`/);
+  assert.doesNotMatch(md, /yarn v1/);
 });
