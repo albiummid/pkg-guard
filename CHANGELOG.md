@@ -24,6 +24,7 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 
 ### Fixes
 
+- Upgrade report: a Vulnerabilities section, right after the summary, lists every Vulnerability the scan found, Transitive vulnerabilities included, one row per affected package version with its Severity, Advisories, the direct dependencies that pull it in, its fixed version and the Fix available (an Update, a Pin, or why there is none, with a hint for a resolution scoped to the parent in yarn projects). The summary counts known Vulnerabilities (direct and transitive) apart from the upgrades that fix one, and an upgrade is marked when its own dependency range brings a fixed version of a vulnerable direct child. Previously the report ignored Transitive vulnerabilities and could read as if the project were clean.
 - JetBrains: "Add dependency…" reports a failed registry lookup (network, registry error) separately from a package that does not exist, and no longer fails on a package that has deprecated versions.
 - JetBrains: after Add dependency, Remove dependency, an Update or a Fix, `package.json` is saved even when no install runs (install setting "never", an untrusted project, or no known package manager).
 - JetBrains: "Fix vulnerabilities" plans against the current editor text, and the status bar stops counting a `package.json` that was deleted.
