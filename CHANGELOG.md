@@ -24,6 +24,7 @@ moves them under the new version. If Unreleased is empty at release time, entrie
 
 ### Fixes
 
+- Upgrade report: every dependency that was not checked is named with its reason (not installed, or registry lookup failed), and the scan's own notes appear under Notes. A registry lookup is retried once after a timeout, network error or server error, with a 30 s timeout so large packages are no longer dropped. A package appears at most once per section (the patch row only stays when its minor row lands in another section), and a `@types/node` target newer than the lowest Node major in `engines.node` is noted, moving a non-major upgrade to "Review before upgrading".
 - JetBrains: "Add dependency…" reports a failed registry lookup (network, registry error) separately from a package that does not exist, and no longer fails on a package that has deprecated versions.
 - JetBrains: after Add dependency, Remove dependency, an Update or a Fix, `package.json` is saved even when no install runs (install setting "never", an untrusted project, or no known package manager).
 - JetBrains: "Fix vulnerabilities" plans against the current editor text, and the status bar stops counting a `package.json` that was deleted.

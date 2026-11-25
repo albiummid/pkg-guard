@@ -2,8 +2,8 @@
 import * as path from 'path';
 import { compatFor } from './fixes';
 import { bumpTargets } from '../versions/bump';
-import { baseVersion, compare, parse } from '../versions/semver';
-import { Bucket, BumpKind, CompatMap, CompatReport, DeprecatedRow, Finding, PackageManager, ReportRow, ScanResult, Section, Settings, UpgradeReport } from '../types';
+import { baseVersion, compare, major, parse } from '../versions/semver';
+import { Bucket, BumpKind, CompatMap, CompatReport, DeprecatedRow, Finding, PackageManager, ReportRow, ScanResult, Section, Settings, UncheckedDep, UpgradeReport } from '../types';
 
 export const compatKey = (name: string, target: string) => `${name}@${target}`;
 
@@ -28,11 +28,25 @@ function vulnFixVersion(findings: Finding[], name: string): string | undefined {
   return best;
 }
 
+/** `@types/node` describing a newer Node than the lowest major `engines.node` allows: a non-major row moves to caution, a major row keeps its bucket. */
+function checkNodeTypes(row: ReportRow, projectNode: string | undefined): void {
+  if (row.name !== '@types/node' || !projectNode) return;
+  const base = baseVersion(projectNode);
+  const n = base ? major(base) : null;
+  const target = major(row.target);
+  if (n === null || target === null || target <= n) return;
+  row.notes.push(`@types/node ${target} describes Node ${target}, but the project's engines.node is ${projectNode}`);
+  if (row.kind !== 'major') row.bucket = 'caution';
+}
+
+/** One row per package per bucket: the minor row already includes the patch, so the patch row only stays when it lands in a different bucket. */
+const dedupe = (rows: ReportRow[]) => rows.filter((x) => x.kind !== 'patch' || !rows.some((y) => y.name === x.name && y.kind === 'minor' && y.bucket === x.bucket));
+
 export function buildUpgradeReport(r: ScanResult, findings: Finding[], s: Settings, title = 'project', compat?: CompatMap): UpgradeReport {
   const rows: ReportRow[] = [];
   const deprecated: DeprecatedRow[] = [];
   const notes: string[] = [];
-  let unchecked = 0;
+  const unchecked: UncheckedDep[] = [];
 
   if (!s.enableOutdated) notes.push('Update checks are disabled (pkgGuard.enableOutdated), so no upgrades were collected.');
 
@@ -41,7 +55,7 @@ export function buildUpgradeReport(r: ScanResult, findings: Finding[], s: Settin
     const installed = r.installed.get(e.name);
     const info = r.info.get(e.name);
     if (!installed || !info) {
-      unchecked++;
+      unchecked.push({ name: e.name, reason: installed ? 'registry lookup failed' : 'not installed' });
       continue;
     }
     const dep = info.deprecated[installed];
@@ -70,25 +84,44 @@ export function buildUpgradeReport(r: ScanResult, findings: Finding[], s: Settin
     }
   }
 
-  if (unchecked) notes.push(`${unchecked} ${unchecked === 1 ? 'dependency was' : 'dependencies were'} not checked (not installed, not on the registry, or registry unavailable).`);
+  for (const [reason, why] of [['registry lookup failed', 'the registry lookup failed'], ['not installed', 'it is not installed']] as const) {
+    const names = unchecked.filter((u) => u.reason === reason).map((u) => u.name);
+    if (names.length) notes.push(`${names.length} ${names.length === 1 ? 'dependency was' : 'dependencies were'} not checked because ${why}: ${names.join(', ')}`);
+  }
   if (rows.length && !compat) notes.push('Peer-dependency and Node-engine compatibility was not checked; "safe" only reflects the version numbers.');
   else if (rows.some((x) => !x.checked)) notes.push('Compatibility could not be verified for some upgrades; they are classified by version number only.');
 
-  const count = (b: Bucket) => rows.filter((x) => x.bucket === b).length;
+  notes.push(...r.notes);
+
+  for (const x of rows) checkNodeTypes(x, r.projectNode);
+  const kept = dedupe(rows);
+  const count = (b: Bucket) => kept.filter((x) => x.bucket === b).length;
   return {
     title,
     pm: r.pm.name,
-    rows,
+    rows: kept,
     deprecated,
-    summary: { safe: count('safe'), caution: count('caution'), major: count('major'), security: rows.filter((x) => x.fixesVuln).length, deprecated: deprecated.length },
+    summary: { safe: count('safe'), caution: count('caution'), major: count('major'), security: kept.filter((x) => x.fixesVuln).length, deprecated: deprecated.length },
     notes,
+    unchecked,
   };
+}
+
+/** Every upgrade the report could show, before patch rows are folded into minor rows (which ones survive depends on the check). */
+function candidates(r: ScanResult, s: Settings): { name: string; kind: BumpKind; target: string }[] {
+  if (!s.enableOutdated) return [];
+  return r.entries.flatMap((e) => {
+    const installed = r.installed.get(e.name);
+    const info = r.info.get(e.name);
+    if (s.ignoredPackages.includes(e.name) || !installed || !info) return [];
+    const targets = bumpTargets(installed, info.versions);
+    return (['patch', 'minor', 'major'] as BumpKind[]).flatMap((kind) => (targets[kind] ? [{ name: e.name, kind, target: targets[kind]! }] : []));
+  });
 }
 
 /** Run the peer / engines compatibility check for each candidate upgrade (network + node_modules); failures just leave that row unchecked. */
 export async function collectCompat(text: string, pkgFile: string, r: ScanResult, s: Settings): Promise<CompatMap> {
-  const base = buildUpgradeReport(r, [], s);
-  const jobs = base.rows.filter((x) => x.kind !== 'major');
+  const jobs = candidates(r, s).filter((x) => x.kind !== 'major');
   const out: CompatMap = new Map();
   let i = 0;
   await Promise.all(

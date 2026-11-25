@@ -38,6 +38,13 @@ export interface UpgradeReport {
   summary: { safe: number; caution: number; major: number; security: number; deprecated: number };
   /** things the reader should know about, e.g. dependencies that could not be checked */
   notes: string[];
+  /** dependencies that got no rows, and why */
+  unchecked: UncheckedDep[];
+}
+
+export interface UncheckedDep {
+  name: string;
+  reason: 'not installed' | 'registry lookup failed';
 }
 
 export type CompatMap = Map<string, CompatReport>;

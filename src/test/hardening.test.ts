@@ -221,6 +221,40 @@ test('a transient registry failure is retried soon while a missing package is re
   );
 });
 
+test('a registry lookup is retried once after a timeout, network error or 5xx', async () => {
+  const ok = () => json({ 'dist-tags': { latest: '2.0.0' }, versions: { '2.0.0': {} } });
+  for (const first of [
+    () => Promise.reject(new DOMException('The operation was aborted due to timeout', 'TimeoutError')),
+    () => Promise.reject(new TypeError('fetch failed')),
+    () => json({}, 503),
+  ]) {
+    clearRegistryCache();
+    let calls = 0;
+    await withFetch(
+      () => (++calls === 1 ? first() : ok()),
+      async () => {
+        assert.equal((await fetchInfo('big', 'https://registry.example'))?.latest, '2.0.0');
+        assert.equal(calls, 2);
+      },
+    );
+  }
+  clearRegistryCache();
+  let calls = 0;
+  await withFetch(
+    () => {
+      calls++;
+      return Promise.reject(new TypeError('fetch failed'));
+    },
+    async () => {
+      assert.equal(await fetchInfo('down', 'https://registry.example'), null);
+      assert.equal(calls, 2);
+      assert.equal(await fetchInfo('down', 'https://registry.example'), null); // the failure is remembered briefly
+      assert.equal(calls, 2);
+    },
+  );
+  clearRegistryCache();
+});
+
 // ---------------------------------------------------------------- findings
 
 const PKG = '{\n  "dependencies": {\n    "p": "^1.0.0"\n  }\n}\n';
